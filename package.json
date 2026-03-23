@@ -1,0 +1,57 @@
+{
+  "name": "memor-cli",
+  "version": "0.1.1",
+  "description": "Instant codebase understanding — structure, flow, and impact visualization for any TS/JS project",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "bin": {
+    "memor": "dist/cli.js",
+    "memor-mcp": "dist/mcp.js"
+  },
+  "files": [
+    "dist/",
+    "public/"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/build-frontend.js",
+    "dev": "npm run build --silent && node dist/cli.js",
+    "analyze": "npm run build --silent && node dist/cli.js",
+    "analyze:open-source": "bash scripts/batch-analyze-open-source.sh",
+    "export": "npm run build --silent && node dist/index.js",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "codebase",
+    "architecture",
+    "documentation",
+    "cli",
+    "developer-tools",
+    "visualization"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mukur/memor"
+  },
+  "devDependencies": {
+    "@types/dagre": "^0.7.54",
+    "@types/node": "^20.11.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.27.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@xyflow/react": "^12.10.1",
+    "dagre": "^0.8.5",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "zod": "^4.3.6"
+  }
+}

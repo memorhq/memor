@@ -1,0 +1,25 @@
+<svg width="179" height="179" viewBox="0 0 179 179" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clipPath="url(#clip0_115_2)">
+<mask id="path-2-inside-1_115_2" fill="white">
+<rect x="1" width="179" height="179" rx="6"/>
+</mask>
+<rect x="1" width="179" height="179" rx="6" stroke="black" stroke-width="20" mask="url(#path-2-inside-1_115_2)"/>
+<mask id="path-3-inside-2_115_2" fill="white">
+<rect x="1" width="135" height="135" rx="6"/>
+</mask>
+<rect x="1" width="135" height="135" rx="6" stroke="black" stroke-width="20" mask="url(#path-3-inside-2_115_2)"/>
+<mask id="path-4-inside-3_115_2" fill="white">
+<rect x="1" width="94" height="94" rx="6"/>
+</mask>
+<rect x="1" width="94" height="94" rx="6" stroke="black" stroke-width="20" mask="url(#path-4-inside-3_115_2)"/>
+<mask id="path-5-inside-4_115_2" fill="white">
+<rect x="1" width="54" height="54" rx="6"/>
+</mask>
+<rect x="1" width="54" height="54" rx="6" stroke="black" stroke-width="20" mask="url(#path-5-inside-4_115_2)"/>
+</g>
+<defs>
+<clipPath id="clip0_115_2">
+<rect width="179" height="179" rx="17" fill="white"/>
+</clipPath>
+</defs>
+</svg>

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Memor — Instant codebase understanding</title>
+  <meta name="description" content="Understand any TypeScript or JavaScript codebase in 10 seconds. Structure, flow, and impact visualization — deterministic, local, no AI fluff." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg width='179' height='179' viewBox='0 0 179 179' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cg clip-path='url(%23c)'%3E%3Cmask id='a' fill='%23fff'%3E%3Crect x='1' width='179' height='179' rx='6'/%3E%3C/mask%3E%3Crect x='1' width='179' height='179' rx='6' stroke='%23000' stroke-width='20' mask='url(%23a)'/%3E%3Cmask id='b' fill='%23fff'%3E%3Crect x='1' width='135' height='135' rx='6'/%3E%3C/mask%3E%3Crect x='1' width='135' height='135' rx='6' stroke='%23000' stroke-width='20' mask='url(%23b)'/%3E%3Cmask id='d' fill='%23fff'%3E%3Crect x='1' width='94' height='94' rx='6'/%3E%3C/mask%3E%3Crect x='1' width='94' height='94' rx='6' stroke='%23000' stroke-width='20' mask='url(%23d)'/%3E%3Cmask id='e' fill='%23fff'%3E%3Crect x='1' width='54' height='54' rx='6'/%3E%3C/mask%3E%3Crect x='1' width='54' height='54' rx='6' stroke='%23000' stroke-width='20' mask='url(%23e)'/%3E%3C/g%3E%3Cdefs%3E%3CclipPath id='c'%3E%3Crect width='179' height='179' rx='17' fill='%23fff'/%3E%3C/clipPath%3E%3C/defs%3E%3C/svg%3E" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      --bg: #ffffff;
+      --bg-subtle: #f8fafc;
+      --bg-card: #ffffff;
+      --border: #e2e8f0;
+      --border-light: #f1f5f9;
+      --accent: #0f172a;
+      --terminal-bg: #0f172a;
+      --terminal-text: #e2e8f0;
+      --terminal-green: #34d399;
+      --max-w: 1080px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+      color: var(--text-primary);
+      background: var(--bg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-light);
+    }
+    .nav-inner {
+      max-width: var(--max-w); margin: 0 auto; padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; color: var(--text-primary);
+    }
+    .nav-brand svg { width: 28px; height: 28px; }
+    .nav-brand span { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+    .nav-links { display: flex; align-items: center; gap: 24px; }
+    .nav-links a {
+      font-size: 14px; font-weight: 500; color: var(--text-secondary);
+      text-decoration: none; transition: color .15s;
+    }
+    .nav-links a:hover { color: var(--text-primary); }
+    .nav-links .nav-cta {
+      background: var(--accent); color: #fff; padding: 7px 16px;
+      border-radius: 8px; font-weight: 600; transition: opacity .15s;
+    }
+    .nav-links .nav-cta:hover { opacity: .85; color: #fff; }
+
+    .hero {
+      max-width: var(--max-w); margin: 0 auto;
+      padding: 100px 24px 80px; text-align: center;
+    }
+    .hero-badge {
+      display: inline-block; font-size: 12px; font-weight: 600;
+      letter-spacing: .4px; text-transform: uppercase; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 5px 14px; margin-bottom: 28px;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 5.5vw, 60px); font-weight: 800;
+      letter-spacing: -0.035em; line-height: 1.1; color: var(--text-primary);
+      max-width: 720px; margin: 0 auto 20px;
+    }
+    .hero p {
+      font-size: 18px; color: var(--text-secondary);
+      max-width: 540px; margin: 0 auto 40px; line-height: 1.65;
+    }
+
+    .terminal-box {
+      display: inline-flex; align-items: center; gap: 12px;
+      background: var(--terminal-bg); border-radius: 12px;
+      padding: 14px 20px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 15px; color: var(--terminal-text);
+      cursor: pointer; transition: transform .12s, box-shadow .12s;
+      border: 1px solid rgba(255,255,255,.06);
+    }
+    .terminal-box:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.15);
+    }
+    .terminal-prefix { color: var(--terminal-green); user-select: none; }
+    .terminal-copy {
+      font-size: 13px; color: var(--text-muted);
+      background: rgba(255,255,255,.08); border-radius: 5px;
+      padding: 3px 8px; transition: color .15s; user-select: none;
+    }
+    .terminal-box:hover .terminal-copy { color: #fff; }
+
+    .values {
+      max-width: var(--max-w); margin: 0 auto; padding: 0 24px 80px;
+    }
+    .values-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1px; background: var(--border);
+      border: 1px solid var(--border); border-radius: 16px; overflow: hidden;
+    }
+    .value-card { background: var(--bg-card); padding: 36px 32px; }
+    .value-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.01em; }
+    .value-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+    .section {
+      max-width: var(--max-w); margin: 0 auto; padding: 80px 24px;
+    }
+    .section-label {
+      font-size: 11px; font-weight: 700; letter-spacing: .8px;
+      text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px;
+    }
+    .section h2 {
+      font-size: clamp(28px, 4vw, 40px); font-weight: 800;
+      letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 16px;
+    }
+    .section > p {
+      font-size: 16px; color: var(--text-secondary);
+      max-width: 520px; line-height: 1.65; margin-bottom: 48px;
+    }
+
+    .views-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .view-card {
+      background: var(--bg-subtle); border: 1px solid var(--border-light);
+      border-radius: 14px; padding: 32px; transition: border-color .15s, box-shadow .15s;
+    }
+    .view-card:hover { border-color: var(--border); box-shadow: 0 2px 12px rgba(0,0,0,.04); }
+    .view-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px; font-size: 16px;
+    }
+    .view-icon-overview { background: #eef2ff; color: #4f46e5; }
+    .view-icon-structure { background: #ecfdf5; color: #059669; }
+    .view-icon-flow { background: #eff6ff; color: #2563eb; }
+    .view-icon-impact { background: #fef2f2; color: #dc2626; }
+    .view-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.01em; }
+    .view-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+    .steps { display: flex; flex-direction: column; }
+    .step { display: flex; gap: 24px; align-items: flex-start; }
+    .step-indicator {
+      display: flex; flex-direction: column; align-items: center;
+      flex-shrink: 0; width: 32px;
+    }
+    .step-num {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .step-line { width: 1px; flex: 1; background: var(--border); min-height: 32px; }
+    .step-content { padding-bottom: 40px; flex: 1; }
+    .step:last-child .step-content { padding-bottom: 0; }
+    .step:last-child .step-line { display: none; }
+    .step-content h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .step-content p { font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.6; }
+    .step-code {
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px;
+      background: var(--terminal-bg); color: var(--terminal-text);
+      padding: 12px 16px; border-radius: 10px; display: inline-block;
+    }
+    .step-code .prefix { color: var(--terminal-green); }
+
+    .trust-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .trust-item h3 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .trust-item p { font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+
+    .cta-section {
+      text-align: center; padding: 80px 24px 100px;
+      max-width: var(--max-w); margin: 0 auto;
+    }
+    .cta-section h2 {
+      font-size: clamp(28px, 4vw, 40px); font-weight: 800;
+      letter-spacing: -0.03em; margin-bottom: 16px;
+    }
+    .cta-section p {
+      font-size: 16px; color: var(--text-secondary); margin-bottom: 32px;
+      max-width: 420px; margin-left: auto; margin-right: auto; line-height: 1.6;
+    }
+
+    footer { border-top: 1px solid var(--border-light); padding: 32px 24px; }
+    .footer-inner {
+      max-width: var(--max-w); margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .footer-left {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--text-muted);
+    }
+    .footer-left svg { width: 18px; height: 18px; }
+    .footer-links { display: flex; gap: 20px; }
+    .footer-links a {
+      font-size: 13px; color: var(--text-muted);
+      text-decoration: none; transition: color .15s;
+    }
+    .footer-links a:hover { color: var(--text-primary); }
+
+    .divider { max-width: var(--max-w); margin: 0 auto; height: 1px; background: var(--border-light); }
+
+    @media (max-width: 768px) {
+      .values-grid { grid-template-columns: 1fr; }
+      .views-grid { grid-template-columns: 1fr; }
+      .trust-grid { grid-template-columns: 1fr; }
+      .hero { padding: 64px 20px 56px; }
+      .section { padding: 56px 20px; }
+      .nav-links a:not(.nav-cta) { display: none; }
+      .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
+    }
+    @media (max-width: 480px) {
+      .terminal-box { font-size: 13px; padding: 12px 14px; }
+      .step { gap: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-brand">
+      <svg width="179" height="179" viewBox="0 0 179 179" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g clip-path="url(#lc)">
+          <mask id="la" fill="#fff"><rect x="1" width="179" height="179" rx="6"/></mask>
+          <rect x="1" width="179" height="179" rx="6" stroke="currentColor" stroke-width="20" mask="url(#la)"/>
+          <mask id="lb" fill="#fff"><rect x="1" width="135" height="135" rx="6"/></mask>
+          <rect x="1" width="135" height="135" rx="6" stroke="currentColor" stroke-width="20" mask="url(#lb)"/>
+          <mask id="ld" fill="#fff"><rect x="1" width="94" height="94" rx="6"/></mask>
+          <rect x="1" width="94" height="94" rx="6" stroke="currentColor" stroke-width="20" mask="url(#ld)"/>
+          <mask id="le" fill="#fff"><rect x="1" width="54" height="54" rx="6"/></mask>
+          <rect x="1" width="54" height="54" rx="6" stroke="currentColor" stroke-width="20" mask="url(#le)"/>
+        </g>
+        <defs><clipPath id="lc"><rect width="179" height="179" rx="17" fill="#fff"/></clipPath></defs>
+      </svg>
+      <span>Memor</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="https://github.com/mukur/memor" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://www.npmjs.com/package/memor-cli" target="_blank" rel="noopener" class="nav-cta">npm</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-badge">Developer tool for TS / JS codebases</div>
+  <h1>Understand any codebase in 10 seconds</h1>
+  <p>Memor projects your codebase into four interactive views — structure, flow, and impact — so you can see what happens, what matters, and what could break.</p>
+  <div class="terminal-box" onclick="copyCommand(this)" title="Click to copy">
+    <span class="terminal-prefix">$</span>
+    <span>npx memor</span>
+    <span class="terminal-copy">Copy</span>
+  </div>
+</section>
+
+<div class="values">
+  <div class="values-grid">
+    <div class="value-card">
+      <h3>What happens</h3>
+      <p>See the runtime flow of your codebase — how requests move, which systems activate, and in what order.</p>
+    </div>
+    <div class="value-card">
+      <h3>What matters</h3>
+      <p>Instantly identify architecturally central systems, high-traffic paths, and critical dependencies.</p>
+    </div>
+    <div class="value-card">
+      <h3>What breaks</h3>
+      <p>Understand the blast radius of any change before you make it. See which systems are at risk and why.</p>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<section class="section" id="features">
+  <div class="section-label">Four views</div>
+  <h2>Every angle of your architecture</h2>
+  <p>Each view answers a different question. Together, they give you complete operational clarity.</p>
+  <div class="views-grid">
+    <div class="view-card">
+      <div class="view-icon view-icon-overview">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="2" width="14" height="14" rx="3"/><line x1="2" y1="9" x2="16" y2="9"/><line x1="9" y1="9" x2="9" y2="16"/></svg>
+      </div>
+      <h3>Overview</h3>
+      <p>Identity, key signals, entry points, and architecture zones — everything you need in one glance.</p>
+    </div>
+    <div class="view-card">
+      <div class="view-icon view-icon-structure">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="4" r="2.5"/><circle cx="4" cy="14" r="2.5"/><circle cx="14" cy="14" r="2.5"/><line x1="9" y1="6.5" x2="4" y2="11.5"/><line x1="9" y1="6.5" x2="14" y2="11.5"/></svg>
+      </div>
+      <h3>Structure</h3>
+      <p>Interactive system graph with connections, types, and hierarchy. See how everything connects.</p>
+    </div>
+    <div class="view-card">
+      <div class="view-icon view-icon-flow">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="4,4 4,14 14,14"/><polyline points="4,10 8,6 12,10 16,4"/></svg>
+      </div>
+      <h3>Flow</h3>
+      <p>Animated storytelling of runtime execution paths. Each step shows systems involved, files, and fused impact intelligence.</p>
+    </div>
+    <div class="view-card">
+      <div class="view-icon view-icon-impact">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="9" r="3"/><circle cx="9" cy="9" r="6.5" stroke-dasharray="3 3"/><circle cx="9" cy="9" r="1"/></svg>
+      </div>
+      <h3>Impact</h3>
+      <p>Change any system and see the ripple. Blast radius, risk levels, and concrete consequences — before you ship.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="how-it-works">
+  <div class="section-label">How it works</div>
+  <h2>Three commands. Zero config.</h2>
+  <p>Memor analyzes your codebase locally and opens an interactive visualization in your browser. No cloud. No setup.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-indicator">
+        <div class="step-num">1</div>
+        <div class="step-line"></div>
+      </div>
+      <div class="step-content">
+        <h3>Navigate to your project</h3>
+        <p>Open your terminal and cd into any TypeScript or JavaScript project.</p>
+        <div class="step-code"><span class="prefix">$ </span>cd your-project</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-indicator">
+        <div class="step-num">2</div>
+        <div class="step-line"></div>
+      </div>
+      <div class="step-content">
+        <h3>Run Memor</h3>
+        <p>One command. No install needed — npx handles it.</p>
+        <div class="step-code"><span class="prefix">$ </span>npx memor</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-indicator">
+        <div class="step-num">3</div>
+        <div class="step-line"></div>
+      </div>
+      <div class="step-content">
+        <h3>Understand</h3>
+        <p>Your browser opens with four interactive views. Explore structure, flow, and impact instantly.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section">
+  <div class="section-label">Built for developers</div>
+  <h2>No magic. Just clarity.</h2>
+  <p>Memor is a projection tool, not an AI assistant. Every insight is grounded in your actual code.</p>
+  <div class="trust-grid">
+    <div class="trust-item">
+      <h3>Deterministic</h3>
+      <p>Same codebase, same result. Every time. No probabilistic guessing or LLM hallucinations.</p>
+    </div>
+    <div class="trust-item">
+      <h3>Runs locally</h3>
+      <p>Your code never leaves your machine. No cloud, no accounts, no telemetry.</p>
+    </div>
+    <div class="trust-item">
+      <h3>Zero config</h3>
+      <p>Point it at any TS/JS project and it works. No config files, no setup, no plugins.</p>
+    </div>
+    <div class="trust-item">
+      <h3>Architecture-first</h3>
+      <p>Understands systems, zones, tiers, and connections — not just files and functions.</p>
+    </div>
+    <div class="trust-item">
+      <h3>Any TS/JS project</h3>
+      <p>Monorepos, single packages, Next.js, NestJS, Express — Memor adapts to your structure.</p>
+    </div>
+    <div class="trust-item">
+      <h3>Open source</h3>
+      <p>MIT licensed. Inspect it, fork it, contribute. The code is the documentation.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="cta-section">
+  <h2>Try it now</h2>
+  <p>One command. Your codebase. Instant understanding.</p>
+  <div class="terminal-box" onclick="copyCommand(this)" title="Click to copy">
+    <span class="terminal-prefix">$</span>
+    <span>npx memor</span>
+    <span class="terminal-copy">Copy</span>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <svg width="179" height="179" viewBox="0 0 179 179" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g clip-path="url(#fc)">
+          <mask id="fa" fill="#fff"><rect x="1" width="179" height="179" rx="6"/></mask>
+          <rect x="1" width="179" height="179" rx="6" stroke="currentColor" stroke-width="20" mask="url(#fa)"/>
+          <mask id="fb" fill="#fff"><rect x="1" width="135" height="135" rx="6"/></mask>
+          <rect x="1" width="135" height="135" rx="6" stroke="currentColor" stroke-width="20" mask="url(#fb)"/>
+          <mask id="fd" fill="#fff"><rect x="1" width="94" height="94" rx="6"/></mask>
+          <rect x="1" width="94" height="94" rx="6" stroke="currentColor" stroke-width="20" mask="url(#fd)"/>
+          <mask id="fe" fill="#fff"><rect x="1" width="54" height="54" rx="6"/></mask>
+          <rect x="1" width="54" height="54" rx="6" stroke="currentColor" stroke-width="20" mask="url(#fe)"/>
+        </g>
+        <defs><clipPath id="fc"><rect width="179" height="179" rx="17" fill="#fff"/></clipPath></defs>
+      </svg>
+      Memor · MIT License
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/mukur/memor" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://www.npmjs.com/package/memor-cli" target="_blank" rel="noopener">npm</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+function copyCommand(el) {
+  var cmd = 'npx memor';
+  var copySpan = el.querySelector('.terminal-copy');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cmd).then(function() {
+      copySpan.textContent = 'Copied!';
+      setTimeout(function() { copySpan.textContent = 'Copy'; }, 1500);
+    });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = cmd;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+    copySpan.textContent = 'Copied!';
+    setTimeout(function() { copySpan.textContent = 'Copy'; }, 1500);
+  }
+}
+</script>
+
+</body>
+</html>
