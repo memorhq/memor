@@ -1,7 +1,7 @@
 {
   "name": "memor-cli",
-  "version": "0.1.1",
-  "description": "Instant codebase understanding — structure, flow, and impact visualization for any TS/JS project",
+  "version": "0.1.2",
+  "description": "Software is alive. See it. Interactive architecture projection for any TS/JS codebase.",
   "type": "commonjs",
   "main": "dist/index.js",
   "bin": {
@@ -30,9 +30,10 @@
     "visualization"
   ],
   "license": "MIT",
+  "homepage": "https://memorhq.github.io/memor",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mukur/memor"
+    "url": "https://github.com/memorhq/memor"
   },
   "devDependencies": {
     "@types/dagre": "^0.7.54",
