@@ -145,21 +145,37 @@ export function detectSystemCandidates(
     }
   }
 
-  // If the repo root has its own package.json AND a src/ directory,
-  // include it as a primary system even when packages/ or scripts/ exist.
-  // Without this, projects whose main code lives at the root alongside
-  // auxiliary dirs (scripts/, packages/) would have their core invisible.
+  // If the repo root has its own package.json AND a recognized source
+  // directory (src/, lib/, app/, core/, server/), include it as a primary
+  // system even when auxiliary dirs (examples/, scripts/, packages/) exist.
+  // Without this, single-package repos like Express or Fastify would only
+  // surface support directories and miss the actual library code.
+  const SOURCE_DIR_NAMES = new Set(["src", "lib", "app", "core", "server"]);
   const rootHasPackageJson = hasPackageJson(scanRoot);
-  const rootHasSrc = rootChildren.some((c) => c.name === "src");
+  const rootHasSourceDir = rootChildren.some((c) => SOURCE_DIR_NAMES.has(c.name));
   const rootAlreadyCovered = candidates.some((c) => c.relativeRoot === ".");
 
-  if (rootHasPackageJson && rootHasSrc && !rootAlreadyCovered) {
+  if (rootHasPackageJson && rootHasSourceDir && !rootAlreadyCovered) {
     candidates.push({
       name: path.basename(repoRoot) || "repository",
       rootPath: repoRoot,
       relativeRoot: ".",
       reason:
-        "Repository root contains its own package.json and src/ directory, indicating a primary system alongside auxiliary packages.",
+        "Repository root contains its own package.json and a source directory, indicating a primary system alongside auxiliary packages.",
+    });
+  }
+
+  // Safety net: if the only candidates are non-package support dirs
+  // (examples/, docs/, benchmarks/), the main codebase is still missing.
+  // Add the root as a candidate so the actual project gets analyzed.
+  const allNonPackage = candidates.length > 0 && candidates.every((c) => c.isNonPackage);
+  if (allNonPackage && rootHasPackageJson && !rootAlreadyCovered) {
+    candidates.push({
+      name: path.basename(repoRoot) || "repository",
+      rootPath: repoRoot,
+      relativeRoot: ".",
+      reason:
+        "Only support directories were detected; including repository root as the primary system.",
     });
   }
 

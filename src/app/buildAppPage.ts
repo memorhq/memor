@@ -390,8 +390,13 @@ body{
   margin:10px 0 6px;padding:8px 12px;border-radius:8px;font-size:12px;
   animation:fadeIn .3s ease;
 }
+<<<<<<< HEAD
 .qa-moderate{background:var(--qa-moderate-bg);border:1px solid var(--qa-moderate-border);color:var(--qa-moderate-text)}
 .qa-low{background:var(--qa-low-bg);border:1px solid var(--qa-low-border);color:var(--qa-low-text)}
+=======
+.qa-moderate{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);color:#93b4f8}
+.qa-low{background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.25);color:#fbbf24}
+>>>>>>> ef42ce7 (Fix single-package repo detection)
 .qa-banner-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .qa-icon{font-size:14px}
 .qa-label{font-weight:600;font-size:12px}
