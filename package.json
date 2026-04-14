@@ -1,6 +1,6 @@
 {
   "name": "memor-cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Software is alive. See it. Interactive architecture projection for any TS/JS codebase.",
   "type": "commonjs",
   "main": "dist/index.js",
