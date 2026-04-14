@@ -309,7 +309,45 @@ export async function analyzeRepo(repoPath: string): Promise<AnalyzeResult> {
     systems.push(draft);
   }
 
-  const sortedSystems = sortSystemsGroupedByTier(systems);
+  // Read README excerpt for each system (used to enrich descriptions)
+  for (const s of systems) {
+    if (s.type === "support-system") continue;
+    const sysAbs = s.rootPath === "." ? rootPath : path.resolve(rootPath, s.rootPath);
+    const readmeNames = ["README.md", "readme.md", "Readme.md", "README.MD"];
+    for (const name of readmeNames) {
+      const raw = await readTextSafe(path.join(sysAbs, name), 4000);
+      if (!raw) continue;
+      const excerpt = extractReadmeExcerpt(raw);
+      if (excerpt) {
+        s.readmeExcerpt = excerpt;
+      }
+      break;
+    }
+  }
+
+  // Deduplicate: if two systems share the same name, keep the one with higher confidence
+  // (this can happen when a package appears in multiple locations, e.g. nested examples/)
+  const seenNames = new Map<string, MemorSystem>();
+  for (const s of systems) {
+    const key = s.name.toLowerCase();
+    const prev = seenNames.get(key);
+    if (!prev) {
+      seenNames.set(key, s);
+    } else {
+      // Keep the one with higher confidence, or more blocks, or shorter rootPath (closer to root)
+      const prevDepth = prev.rootPath.split("/").length;
+      const curDepth = s.rootPath.split("/").length;
+      const betterConfidence = s.confidence > prev.confidence;
+      const moreBlocks = s.blocks.length > prev.blocks.length && s.confidence >= prev.confidence - 0.1;
+      const shallower = curDepth < prevDepth;
+      if (betterConfidence || moreBlocks || shallower) {
+        seenNames.set(key, s);
+      }
+    }
+  }
+  const dedupedSystems = [...seenNames.values()];
+
+  const sortedSystems = sortSystemsGroupedByTier(dedupedSystems);
 
   const summary = buildSummary(
     totalFiles,
@@ -394,6 +432,58 @@ export async function analyzeRepo(repoPath: string): Promise<AnalyzeResult> {
     deprioritizedPaths: scan.deprioritizedPaths,
     scanMeta: scan.meta,
   };
+}
+
+/**
+ * Extract a 1–2 sentence description from a README file.
+ * Skips headings, badges, install instructions, and code blocks.
+ */
+function extractReadmeExcerpt(raw: string): string | null {
+  const lines = raw.split("\n");
+  let inCodeBlock = false;
+  const candidates: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+
+    // Skip headings, badges, empty lines, HTML tags, install/usage sections
+    if (!trimmed) continue;
+    if (trimmed.startsWith("#")) continue;
+    if (trimmed.startsWith("![") || trimmed.startsWith("[![")) continue;
+    if (trimmed.startsWith("<")) continue;
+    if (trimmed.startsWith("|")) continue;  // tables
+    if (/^(npm install|yarn add|pnpm add|npx |bun add)/i.test(trimmed)) continue;
+    if (/^(install|usage|getting started|quick start|table of contents|license)/i.test(trimmed)) continue;
+
+    // Require at least 30 chars and a letter, skip lines that look like code
+    if (trimmed.length < 30) continue;
+    if (/^[`$>]/.test(trimmed)) continue;
+    if (/^\s*(import|require|const |let |var |export )/i.test(trimmed)) continue;
+
+    candidates.push(trimmed);
+    if (candidates.length >= 3) break;
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Take first 1-2 candidates, join, and truncate to 200 chars
+  let result = candidates.slice(0, 2).join(" ").trim();
+  // Clean up markdown links [text](url) → text
+  result = result.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  // Clean up bold/italic
+  result = result.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
+  // Truncate
+  if (result.length > 220) {
+    result = result.slice(0, 217) + "...";
+  }
+
+  return result.length >= 30 ? result : null;
 }
 
 /**
@@ -513,6 +603,35 @@ function promoteForRepoMode(
       mainApp.systemTier = "primary";
       mainApp.importanceScore = Math.max(mainApp.importanceScore, 0.9);
       mainApp.isRepoCenter = true;
+    }
+  }
+
+  if (repoMode === "product-domain-machine") {
+    // Systems under packages/ can't get primary tier from assignSystemTier, but in a
+    // product-domain-machine monorepo they absolutely should be primary if they're runnable apps.
+    const primaries = systems.filter((s) => s.systemTier === "primary");
+    if (primaries.length === 0) {
+      const RUNNABLE_TYPES = new Set(["web-app", "api-service", "worker", "docs-site"]);
+      let promoted = false;
+      for (const s of systems) {
+        if (s.type === "support-system") continue;
+        if (RUNNABLE_TYPES.has(s.type)) {
+          s.systemTier = "primary";
+          s.importanceScore = Math.max(s.importanceScore, 0.88);
+          promoted = true;
+        }
+      }
+      // If nothing runnable found, promote highest-importance systems
+      if (!promoted) {
+        const top = [...systems]
+          .filter((s) => s.type !== "support-system")
+          .sort((a, b) => b.importanceScore - a.importanceScore)
+          .slice(0, 2);
+        for (const s of top) {
+          s.systemTier = "primary";
+          s.importanceScore = Math.max(s.importanceScore, 0.85);
+        }
+      }
     }
   }
 

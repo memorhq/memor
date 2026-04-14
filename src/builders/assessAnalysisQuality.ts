@@ -205,12 +205,12 @@ function buildSuggestion(
   repoName: string
 ): string {
   if (confidence === "high") {
-    return `Analysis looks solid — ${metrics.totalSystems} systems with ${Math.round(metrics.connectionRatio * 100)}% connected.`;
+    return `Analysis looks solid — ${metrics.totalSystems} system${metrics.totalSystems !== 1 ? "s" : ""} with ${Math.round(metrics.connectionRatio * 100)}% connected.`;
   }
 
   const parts: string[] = [];
   parts.push(
-    `Memor analyzed ${metrics.totalFiles.toLocaleString()} files across ${metrics.totalSystems} systems.`
+    `Memor analyzed ${metrics.totalFiles.toLocaleString()} files across ${metrics.totalSystems} system${metrics.totalSystems !== 1 ? "s" : ""}.`
   );
 
   if (confidence === "low") {
@@ -234,7 +234,18 @@ function buildSuggestion(
     parts.push(`because ${reasons.join(" and ")}.`);
   }
 
-  parts.push(`For better results, try scoping to a subdirectory: memor ${repoName}/apps/main-app`);
+  // Context-aware hints — no hardcoded paths that might not exist
+  const hasModeSignal = concerns.some((c) => c.signal === "unclear-repo-mode");
+  const hasPartialScan = concerns.some((c) => c.signal === "partial-scan");
+  const hasWeakConns = concerns.some((c) => c.signal === "weak-connections");
+
+  if (hasPartialScan) {
+    parts.push("For better results, try scoping to a specific package subdirectory.");
+  } else if (hasModeSignal && metrics.totalSystems <= 2) {
+    parts.push("This looks like a single-package or specialized repo — Memor shows richer results on multi-package projects.");
+  } else if (hasModeSignal || hasWeakConns) {
+    parts.push("Try running Memor on a specific sub-package if this is a monorepo without standard apps/ or packages/ directories.");
+  }
 
   return parts.join(" ");
 }

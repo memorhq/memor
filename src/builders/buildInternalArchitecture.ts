@@ -23,12 +23,25 @@ const SKIP = new Set([
 const ZONE_MAP: Record<string, { kind: InternalZoneKind; label: string; imp: number }> = {
   components:  { kind: "ui",       label: "Components",  imp: 0.7  },
   ui:          { kind: "ui",       label: "UI",          imp: 0.65 },
+  client:      { kind: "ui",       label: "Client",      imp: 0.65 },
+  frontend:    { kind: "ui",       label: "Frontend",    imp: 0.65 },
+  pages:       { kind: "ui",       label: "Pages",       imp: 0.6  },
+  templates:   { kind: "ui",       label: "Templates",   imp: 0.5  },
+  widgets:     { kind: "ui",       label: "Widgets",     imp: 0.55 },
   hooks:       { kind: "logic",    label: "Hooks",       imp: 0.7  },
   lib:         { kind: "logic",    label: "Lib",         imp: 0.65 },
   utils:       { kind: "support",  label: "Utils",       imp: 0.4  },
   helpers:     { kind: "support",  label: "Helpers",     imp: 0.35 },
   services:    { kind: "logic",    label: "Services",    imp: 0.7  },
   api:         { kind: "api",      label: "API",         imp: 0.7  },
+  backend:     { kind: "api",      label: "Backend",     imp: 0.65 },
+  routes:      { kind: "api",      label: "Routes",      imp: 0.7  },
+  router:      { kind: "api",      label: "Router",      imp: 0.65 },
+  controllers: { kind: "api",      label: "Controllers", imp: 0.7  },
+  handlers:    { kind: "api",      label: "Handlers",    imp: 0.65 },
+  resolvers:   { kind: "api",      label: "Resolvers",   imp: 0.65 },
+  graphql:     { kind: "api",      label: "GraphQL",     imp: 0.65 },
+  restapi:     { kind: "api",      label: "REST API",    imp: 0.65 },
   providers:   { kind: "provider", label: "Providers",   imp: 0.65 },
   context:     { kind: "provider", label: "Context",     imp: 0.6  },
   contexts:    { kind: "provider", label: "Contexts",    imp: 0.6  },
@@ -43,6 +56,13 @@ const ZONE_MAP: Record<string, { kind: InternalZoneKind; label: string; imp: num
   images:      { kind: "support",  label: "Images",      imp: 0.15 },
   config:      { kind: "config",   label: "Config",      imp: 0.35 },
   configs:     { kind: "config",   label: "Config",      imp: 0.35 },
+  terraform:   { kind: "config",   label: "Terraform",   imp: 0.45 },
+  infra:       { kind: "config",   label: "Infra",       imp: 0.45 },
+  infrastructure: { kind: "config", label: "Infra",      imp: 0.45 },
+  k8s:         { kind: "config",   label: "Kubernetes",  imp: 0.45 },
+  kubernetes:  { kind: "config",   label: "Kubernetes",  imp: 0.45 },
+  helm:        { kind: "config",   label: "Helm",        imp: 0.45 },
+  env:         { kind: "config",   label: "Env",         imp: 0.3  },
   types:       { kind: "support",  label: "Types",       imp: 0.35 },
   interfaces:  { kind: "support",  label: "Interfaces",  imp: 0.3  },
   middleware:  { kind: "logic",    label: "Middleware",   imp: 0.6  },
@@ -51,6 +71,20 @@ const ZONE_MAP: Record<string, { kind: InternalZoneKind; label: string; imp: num
   data:        { kind: "logic",    label: "Data",        imp: 0.6  },
   models:      { kind: "logic",    label: "Models",      imp: 0.55 },
   schemas:     { kind: "logic",    label: "Schemas",     imp: 0.5  },
+  database:    { kind: "logic",    label: "Database",    imp: 0.6  },
+  db:          { kind: "logic",    label: "Database",    imp: 0.6  },
+  migrations:  { kind: "logic",    label: "Migrations",  imp: 0.5  },
+  seeds:       { kind: "logic",    label: "Seeds",       imp: 0.35 },
+  workers:     { kind: "logic",    label: "Workers",     imp: 0.6  },
+  jobs:        { kind: "logic",    label: "Jobs",        imp: 0.6  },
+  queues:      { kind: "logic",    label: "Queues",      imp: 0.55 },
+  tasks:       { kind: "logic",    label: "Tasks",       imp: 0.55 },
+  plugins:     { kind: "logic",    label: "Plugins",     imp: 0.6  },
+  extensions:  { kind: "logic",    label: "Extensions",  imp: 0.55 },
+  adapters:    { kind: "logic",    label: "Adapters",    imp: 0.55 },
+  integrations: { kind: "logic",   label: "Integrations", imp: 0.55 },
+  events:      { kind: "logic",    label: "Events",      imp: 0.55 },
+  commands:    { kind: "logic",    label: "Commands",    imp: 0.55 },
   constants:   { kind: "support",  label: "Constants",   imp: 0.3  },
   shared:      { kind: "logic",    label: "Shared",      imp: 0.5  },
   common:      { kind: "logic",    label: "Common",      imp: 0.5  },
@@ -58,6 +92,9 @@ const ZONE_MAP: Record<string, { kind: InternalZoneKind; label: string; imp: num
   modules:     { kind: "logic",    label: "Modules",     imp: 0.55 },
   layouts:     { kind: "ui",       label: "Layouts",     imp: 0.5  },
   views:       { kind: "ui",       label: "Views",       imp: 0.55 },
+  scripts:     { kind: "support",  label: "Scripts",     imp: 0.35 },
+  bin:         { kind: "logic",    label: "CLI",         imp: 0.6  },
+  cli:         { kind: "logic",    label: "CLI",         imp: 0.65 },
 };
 
 const ROUTE_DIRS = new Set(["app", "pages"]);
@@ -226,6 +263,7 @@ const ADAPTIVE_SKIP = new Set([
   "node_modules", ".git", "dist", "build", "out", ".next", ".turbo",
   ".cache", "coverage", "__pycache__", "test", "tests", "__tests__",
   "__mocks__", "fixtures", "e2e", ".github", ".vscode", ".idea",
+  "storybook-static", "archived", ".storybook", "vendor", "tmp", "temp",
 ]);
 
 function inferZoneKind(name: string): InternalZoneKind {
@@ -240,6 +278,10 @@ function inferZoneKind(name: string): InternalZoneKind {
   if (/^(toolbar|devtool|inspector)/.test(lower)) return "support";
   if (/^(config|env|setting|preference)/.test(lower)) return "config";
   if (/^(type|interface|declaration)/.test(lower)) return "support";
+  if (/^(infra|terraform|k8s|kubernetes|helm|deploy|ops)/.test(lower)) return "config";
+  if (/^(worker|job|queue|task|event|command)/.test(lower)) return "logic";
+  if (/^(page|screen|view|template|widget)/.test(lower)) return "ui";
+  if (/(plugin|extension|addon|integration|adapter)$/.test(lower)) return "logic";
   return "logic";
 }
 

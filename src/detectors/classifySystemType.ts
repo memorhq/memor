@@ -153,7 +153,9 @@ export async function classifySystemType(
   const posixRel =
     relFromRepo === "" ? "." : relFromRepo.split(path.sep).join("/");
   const isUnderPackages =
-    posixRel.startsWith("packages/") || posixRel.split("/")[0] === "packages";
+    posixRel.startsWith("packages/") ||
+    posixRel.split("/")[0] === "packages" ||
+    posixRel.includes("/packages/"); // nested monorepos: code/packages/foo, apps/packages/foo
 
   const folderBackendHint = folderNameSuggestsBackendService(
     ctx.candidateFolderName
@@ -231,6 +233,29 @@ export async function classifySystemType(
     hasDep("@storybook/react") ||
     hasDep("storybook") ||
     hasDirName(systemRoot, under, ".storybook");
+
+  // Packages under packages/ whose name suggests a build/dev-server tool rather
+  // than a standalone running service (e.g. cli-sb, server-webpack, builder-vite).
+  const nameParts = ctx.candidateFolderName.toLowerCase().split(/[-_]/);
+  const isNamedBuildToolUnderPackages =
+    isUnderPackages &&
+    (nameParts.includes("cli") ||
+      nameParts.includes("builder") ||
+      nameParts.includes("preset") ||
+      nameParts.includes("addon") ||
+      // "server" under packages/ is a dev-server tool, not a standalone service
+      // unless it also reads like an API (api-server, app-server)
+      (nameParts.includes("server") &&
+        !nameParts.some((p) => /^(api|app|web|gateway)$/.test(p))));
+
+  const isBuildTool =
+    storybook ||
+    isNamedBuildToolUnderPackages ||
+    hasDep("webpack-dev-server") ||
+    hasDep("@storybook/builder-webpack5") ||
+    hasDep("@storybook/builder-vite") ||
+    (hasDep("webpack") && hasDep("express") && isUnderPackages) ||
+    (hasDep("vite") && hasDep("express") && isUnderPackages);
 
   const docFramework =
     hasDep("@docusaurus/core") ||
@@ -339,6 +364,14 @@ export async function classifySystemType(
 
   if (isUnderPackages && pkg && !qualifiesWebApp && !nest && !expressLike) {
     s["shared-package"] += 0.35;
+  }
+
+  // Build tools under packages/ should never be api-service — they use express for
+  // their dev server but are consumed as packages, not run as standalone services.
+  if (isUnderPackages && isBuildTool && !nest) {
+    s["shared-package"] += 0.55;
+    s["api-service"] *= 0.25;
+    s["worker"] *= 0.25;
   }
 
   // Python/polyglot packages: pyproject.toml or setup.py with src/ is a

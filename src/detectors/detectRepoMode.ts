@@ -72,10 +72,22 @@ export function detectRepoMode(
       main.name.toLowerCase().replace(/[^a-z0-9]/g, "") === repoNameLow;
     const noRunnable = countBy(systems, (s) => s.runtimeRole === "runnable") === 0;
 
+    // Exclude web-app pattern: a package with both a server zone AND a client zone is
+    // a full-stack web app, not a framework (e.g. test-coverage-ui with server/ + client/)
+    const zones = main.internalStructure?.zones ?? [];
+    const hasServerZone = zones.some((z) => /^server$/i.test(z.label));
+    const hasClientZone = zones.some((z) => /^client$/i.test(z.label));
+    const isWebAppPattern = hasServerZone && hasClientZone;
+
+    // Also exclude test/coverage tooling repos from framework-core classification
+    const isTestHarness = /test|coverage|cypress|playwright|jest|vitest/i.test(repoNameLow);
+
     if (
       (hasCompiler || hasRichInternals || hasRichSubsystems || hasRichBlocks) &&
       nameMatchesRepo &&
-      noRunnable
+      noRunnable &&
+      !isWebAppPattern &&
+      !isTestHarness
     ) {
       return { mode: "framework-core", confidence: 0.75 };
     }
@@ -179,9 +191,19 @@ export function detectRepoMode(
   }
 
   // ── library-tooling ───────────────────────────────────────────────
-  // Smaller package graph, codegen/cli/utils shape, no runnable apps
+  // Smaller package graph, codegen/cli/utils shape, no/few runnable apps
+  // Include api-service packages that have library-code blocks (e.g., express itself)
+  const backendLibCount = countBy(systems, (s) =>
+    s.type === "api-service" &&
+    s.blocks.some((b) => b.type === "library-code")
+  );
+  const consumableLibCount = sharedPkgCount + backendLibCount;
   if (runnableCount === 0 && n >= 1 && n <= 10 && sharedPkgCount >= 1) {
     scores["library-tooling"] += 0.3;
+  }
+  // Single backend library (e.g., express/koa/fastify as the package itself)
+  if (n === 1 && backendLibCount === 1) {
+    scores["library-tooling"] += 0.45;
   }
   if (/\b(codegen|codemods?|query|cli|toolkit|utils?)\b/.test(nameBlob)) {
     scores["library-tooling"] += 0.2;

@@ -543,6 +543,35 @@ const FLOW_PATTERNS: FlowPattern[] = [
         });
       }
 
+      // Synthesize a middle step if we couldn't build one from connections.
+      // This ensures the flow is useful even for single-package libraries with no
+      // system-to-system connections yet detected.
+      if (steps.length < 3) {
+        if (center.type === "api-service") {
+          // Backend framework / HTTP library (e.g., express, koa, fastify)
+          steps.splice(1, 0, {
+            label: "Route matching & middleware",
+            systemName: center.name,
+            description: `${center.name} matches incoming requests to registered routes and runs the middleware stack (auth, parsing, logging, error handling).`,
+            whyItMatters: "The routing engine is the architectural center — it determines how every request is processed",
+          });
+        } else {
+          // Generic library: describe it from its blocks
+          const meaningfulBlocks = center.blocks
+            .filter((b) => !["tests", "scripts", "docs", "examples"].includes(b.type))
+            .map((b) => b.name)
+            .slice(0, 3);
+          if (meaningfulBlocks.length > 0) {
+            steps.splice(1, 0, {
+              label: "Core processing",
+              systemName: center.name,
+              description: `${center.name} applies its core logic through: ${meaningfulBlocks.join(", ")}.`,
+              whyItMatters: "The primary value of the library — what it does that consumers don't need to implement themselves",
+            });
+          }
+        }
+      }
+
       steps.push({
         label: "Consumer output",
         description: consumers.length > 0
@@ -551,11 +580,15 @@ const FLOW_PATTERNS: FlowPattern[] = [
         whyItMatters: "Where the library's value is realized in the consumer's application",
       });
 
+      // Only emit library-api-flow if it has meaningful middle steps
+      if (steps.length < 3) {
+        return { id: "library-api-flow", title: `${center.name} API flow`, steps: [], confidence: "low" as const, type: "runtime" as const };
+      }
       return {
         id: "library-api-flow",
         title: `${center.name} API flow`,
         steps,
-        confidence: steps.length >= 3 ? "high" : "medium",
+        confidence: steps.length >= 4 ? "high" : "medium",
         type: "runtime",
       };
     },
@@ -885,6 +918,90 @@ const FLOW_PATTERNS: FlowPattern[] = [
     },
   },
 
+  // ═══════════════════════════════════════════════════════════════════
+  // SINGLE-PACKAGE EXPRESS / FULLSTACK APP
+  // ═══════════════════════════════════════════════════════════════════
+
+  {
+    id: "express-server-flow",
+    match: (ctx) => {
+      const hasExpressTech = ctx.systems.some((s) =>
+        (s.detectedTech || []).some((t) => /express|fastify|hono|koa/i.test(t))
+      );
+      const hasServerZone = ctx.zones.some((z) => /server/i.test(z.name)) ||
+        ctx.systems.some((s) => s.internalStructure?.zones.some((z) => /server/i.test(z.label)));
+      const hasClientZone = ctx.zones.some((z) => /client/i.test(z.name)) ||
+        ctx.systems.some((s) => s.internalStructure?.zones.some((z) => /client/i.test(z.label)));
+      const isSinglePackage = ctx.systems.filter((s) => s.type !== "support-system").length <= 2;
+      return hasExpressTech && (hasServerZone || hasClientZone) && isSinglePackage;
+    },
+    build: (ctx) => {
+      const mainSys = ctx.systems.find((s) => s.type !== "support-system") || ctx.systems[0];
+      const internalZones = mainSys?.internalStructure?.zones ?? [];
+      const serverZone = internalZones.find((z) => /server/i.test(z.label));
+      const clientZone = internalZones.find((z) => /client/i.test(z.label));
+      const clientName = clientZone ? `${clientZone.label} (${clientZone.fileCount} files)` : "Client";
+
+      // Detect tech for richer descriptions
+      const tech = mainSys?.detectedTech ?? [];
+      const hasReact = tech.some((t) => /react/i.test(t));
+      const hasExpress = tech.some((t) => /express/i.test(t));
+      const frameworkNote = hasExpress ? "Express" : "HTTP server";
+
+      // Find any API/routes zone for a better description
+      const routesZone = internalZones.find((z) => /route|api|controller|handler/i.test(z.label));
+      const dbZone = internalZones.find((z) => /database|db|prisma|model/i.test(z.label));
+
+      const steps: FlowStep[] = [
+        {
+          label: "HTTP request arrives",
+          systemName: mainSys?.name,
+          description: `An incoming HTTP request is received by the ${frameworkNote} layer${serverZone ? ` (${serverZone.label}, ${serverZone.fileCount} files)` : ""}. Middleware stack runs: authentication, parsing, rate-limiting.`,
+          whyItMatters: "The entry point — every interaction enters through here before any business logic runs",
+        },
+        {
+          label: routesZone ? `${routesZone.label} handle request` : "Route handlers process request",
+          systemName: mainSys?.name,
+          description: routesZone
+            ? `The router matches the URL to a handler in ${routesZone.label} (${routesZone.fileCount} files) — business logic and data access happen here.`
+            : `The HTTP router matches the URL and delegates to the appropriate handler for business logic and data fetching.`,
+          whyItMatters: "Where the application decides what to do — routing is the architectural control center",
+        },
+      ];
+
+      if (dbZone) {
+        steps.push({
+          label: `Data access via ${dbZone.label}`,
+          systemName: mainSys?.name,
+          description: `Handler queries the ${dbZone.label} layer (${dbZone.fileCount} files) for persistence or retrieval.`,
+          whyItMatters: "The source of truth — all state changes flow through the data layer",
+        });
+      }
+
+      if (clientZone) {
+        steps.push({
+          label: `${clientZone.label} renders response`,
+          description: `The ${clientName} layer${hasReact ? " (React)" : ""} renders the UI — either server-side templates or a client-side SPA that hydrates from the API response.`,
+          whyItMatters: "What the user actually sees — the final output of the request pipeline",
+        });
+      }
+
+      steps.push({
+        label: "Response returned",
+        description: "Processed data or rendered HTML is serialized, headers set, and the response dispatched to the client.",
+        whyItMatters: "The end of the round trip — performance here directly affects user-perceived latency",
+      });
+
+      return {
+        id: "express-server-flow",
+        title: "Request / response cycle",
+        steps,
+        confidence: "medium" as const,
+        type: "runtime" as const,
+      };
+    },
+  },
+
   {
     id: "build-infra",
     match: (ctx) => !!ctx.findZone(/build|tooling|scripts/i),
@@ -1053,11 +1170,20 @@ export function generateRepoFlows(
   const sysNames = new Set(systems.map((s) => s.name.toLowerCase()));
   const families = inferFlowFamilies(repoMode, systems, story.zones);
 
+  // For single-package repos, the one real package is always the center even if
+  // detectRepoCenterSystems didn't mark it (that requires ≥3 systems).
+  const effectiveCenter =
+    center ??
+    (systems.filter((s) => s.type !== "support-system").length === 1
+      ? systems.find((s) => s.type !== "support-system")
+      : undefined);
+  const effectiveCenterName = effectiveCenter?.name ?? centerName;
+
   const ctx: PatternCtx = {
     systems,
     zones: story.zones,
-    center,
-    centerName,
+    center: effectiveCenter,
+    centerName: effectiveCenterName,
     repoMode,
     families,
     zoneNames,
@@ -1078,6 +1204,17 @@ export function generateRepoFlows(
       if (pattern.match(ctx)) {
         const flow = pattern.build(ctx);
         if (flow.steps.length >= 2) {
+          // Filter trivially useless 2-step flows: "Import X → Consumer output"
+          const isUselessImportFlow = flow.steps.length === 2 &&
+            /^import\s/i.test(flow.steps[0].label) &&
+            /consumer output/i.test(flow.steps[flow.steps.length - 1].label);
+          if (isUselessImportFlow) continue;
+
+          // Don't add low-confidence build-infra if we already have better flows
+          const isBuildInfraFallback = pattern.id === "build-infra" &&
+            flows.some(f => f.confidence === "high" || f.confidence === "medium");
+          if (isBuildInfraFallback) continue;
+
           flows.push(flow);
           usedIds.add(pattern.id);
         }

@@ -203,11 +203,46 @@ export function analyzeChangeImpact(
     score <= 45 ? "contained" :
     score <= 70 ? "broad" : "architectural";
 
-  // ── Confidence ─────────────────────────────────────────────────────
+  // ── Zone-level fallback for single-package repos ──────────────────
+  // When there are no system-level connections, show internal zone dependencies
+  // so the Impact view isn't completely empty for standalone apps/libraries.
 
   const totalConnections =
     (selected.connections?.incoming?.length || 0) +
     (selected.connections?.outgoing?.length || 0);
+
+  if (directImpacts.length === 0 && indirectImpacts.length === 0 && totalConnections === 0) {
+    const zones = selected.internalStructure?.zones ?? [];
+    const zoneDeps = selected.internalStructure?.dependencies ?? [];
+    if (zones.length >= 2 && zoneDeps.length > 0) {
+      // Group deps by target zone — zones with many incoming deps are high-impact
+      const targetCounts = new Map<string, number>();
+      for (const dep of zoneDeps) {
+        targetCounts.set(dep.targetZoneId, (targetCounts.get(dep.targetZoneId) || 0) + dep.importCount);
+      }
+
+      for (const dep of zoneDeps.slice(0, 6)) {
+        const srcZone = zones.find((z) => z.id === dep.sourceZoneId);
+        const tgtZone = zones.find((z) => z.id === dep.targetZoneId);
+        if (!srcZone || !tgtZone) continue;
+
+        const totalIncoming = targetCounts.get(dep.targetZoneId) || 1;
+        const risk: RiskLevel = totalIncoming >= 10 ? "high" : totalIncoming >= 4 ? "medium" : "low";
+
+        directImpacts.push({
+          systemId: selected.id,
+          systemName: `${selected.name} › ${srcZone.label}`,
+          zoneName: tgtZone.label,
+          reason: `${srcZone.label} imports from ${tgtZone.label} (${dep.importCount} import${dep.importCount !== 1 ? "s" : ""}) — changes to ${tgtZone.label} may require updates here.`,
+          risk,
+          impactType: "runtime",
+        });
+      }
+    }
+  }
+
+  // ── Confidence ─────────────────────────────────────────────────────
+
   const confidence: "high" | "medium" | "low" =
     totalConnections >= 6 ? "high" :
     totalConnections >= 2 ? "medium" : "low";
@@ -215,7 +250,7 @@ export function analyzeChangeImpact(
   // ── Summary ────────────────────────────────────────────────────────
 
   const summary = generateSummary(
-    selected, directImpacts, indirectImpacts, blastRadiusLevel, impactedZones
+    selected, directImpacts, indirectImpacts, blastRadiusLevel, impactedZones, systems
   );
 
   return {
@@ -545,7 +580,8 @@ function generateSummary(
   direct: DirectImpact[],
   indirect: IndirectImpact[],
   level: string,
-  zones: Set<string>
+  zones: Set<string>,
+  allSystems: MemorSystem[]
 ): string {
   const highCount = direct.filter((d) => d.risk === "high").length;
   const highNames = direct.filter((d) => d.risk === "high").slice(0, 2).map((d) => d.systemName);
@@ -553,6 +589,24 @@ function generateSummary(
   const name = selected.name;
   const shape = describeChangeShape(selected);
   const shapeNote = shape ? ` (${shape})` : "";
+
+  // Self-contained system: no connections at all
+  const isSelfContained =
+    direct.length === 0 && indirect.length === 0 &&
+    (selected.connections?.incoming?.length || 0) === 0 &&
+    (selected.connections?.outgoing?.length || 0) === 0;
+
+  if (isSelfContained) {
+    const internalZones = selected.internalStructure?.zones ?? [];
+    const zoneNames = internalZones
+      .filter((z) => z.kind !== "support" && z.kind !== "config")
+      .slice(0, 3)
+      .map((z) => z.label);
+    if (zoneNames.length > 0) {
+      return `${name} is a self-contained system — no cross-system connections detected. Changes within ${zoneNames.join(", ")} zones stay local to this codebase.`;
+    }
+    return `${name} is a self-contained system with no detected dependencies on other systems. Use the Structure view to explore internal zones.`;
+  }
 
   if (level === "local") {
     return `Changes to ${name}${shapeNote} have limited reach — ${direct.length} connected system${direct.length !== 1 ? "s" : ""}.`;

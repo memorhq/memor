@@ -54,12 +54,6 @@ const SKIP_DIRS = new Set([
 const NON_PACKAGE_SYSTEM_DIRS: Record<string, string> = {
   compiler:      "Compiler or build-time transformation directory.",
   scripts:       "Build scripts, CI tooling, or repo infrastructure.",
-  examples:      "Example projects and usage demonstrations.",
-  benchmark:     "Performance benchmarking infrastructure.",
-  benchmarking:  "Performance benchmarking infrastructure.",
-  fixtures:      "Test fixtures and reference data.",
-  playgrounds:   "Development playgrounds for manual testing.",
-  playground:    "Development playground for manual testing.",
   documentation: "In-repo documentation source.",
   docs:          "In-repo documentation source.",
   e2e:           "End-to-end test infrastructure.",
@@ -127,6 +121,19 @@ export function detectSystemCandidates(
 
   if (packages) {
     candidates.push(...findPackageRoots(packages, repoRoot));
+  }
+
+  // Detect unconventional monorepo source dirs (e.g., storybook uses `code/`, others use `src/`)
+  // Only scan these if they contain many package.json files (indicating a monorepo structure)
+  const UNCONVENTIONAL_MONOREPO_DIRS = ["code", "libs", "modules", "crates"];
+  for (const dirName of UNCONVENTIONAL_MONOREPO_DIRS) {
+    const candidate = rootChildren.find((c) => c.name === dirName);
+    if (!candidate) continue;
+    const pkgRoots = findPackageRoots(candidate, repoRoot);
+    if (pkgRoots.length >= 3) {
+      // Has enough packages to be a monorepo source dir
+      candidates.push(...pkgRoots);
+    }
   }
 
   // Detect architecturally significant non-package directories at repo root

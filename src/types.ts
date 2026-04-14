@@ -139,6 +139,8 @@ export type MemorSystem = {
   subsystems?: SystemSubsystem[];
   /** Description from the package's own package.json */
   packageDescription?: string;
+  /** Excerpt extracted from the system's README.md */
+  readmeExcerpt?: string;
   /** Detected languages, frameworks, runtimes for this system */
   detectedTech?: string[];
   rootPath: string;

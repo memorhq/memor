@@ -15,6 +15,10 @@ function fromPackageJson(
 ): SystemNarrative | null {
   const desc = sys.packageDescription;
   if (!desc || desc.length <= 8) return null;
+  // Skip placeholder/TODO descriptions
+  if (/^\s*TODO/i.test(desc)) return null;
+  // Skip descriptions that are just the package name
+  if (desc.toLowerCase().replace(/[^a-z0-9]/g, "") === sys.name.toLowerCase().replace(/[^a-z0-9]/g, "")) return null;
 
   const isCenter =
     sys.name.toLowerCase().replace(/[^a-z0-9]/g, "") ===
@@ -393,6 +397,15 @@ export function generateSystemNarrative(
   const ext = fromExtendsRelation(sys, repoName);
   if (ext) return ext;
 
+  // P4b: README excerpt (between extends-relationship and plain fallback)
+  if (sys.readmeExcerpt && sys.readmeExcerpt.length > 20) {
+    return {
+      shortDescription: sys.readmeExcerpt,
+      confidence: "medium",
+      reasoning: [`[readme] Extracted from README.md`],
+    };
+  }
+
   // P5: Fallback — keep existing description
   return {
     shortDescription: sys.description || `Package: ${sys.name}.`,
@@ -438,9 +451,19 @@ export function applyNarratives(
   for (const sys of systems) {
     const narrative = generateSystemNarrative(sys, repoName, centerDesc);
     narratives.set(sys.id, narrative);
+    const GENERIC_DESCRIPTIONS = [
+      "provides shared runtime utilities",
+      "provides runtime utilities",
+      "shared runtime utilities",
+      "provides utilities",
+    ];
+    const isGeneric = GENERIC_DESCRIPTIONS.some((g) =>
+      narrative.shortDescription.toLowerCase().includes(g)
+    );
     if (
       narrative.shortDescription.length > 10 &&
-      !narrative.shortDescription.startsWith("Package:")
+      !narrative.shortDescription.startsWith("Package:") &&
+      !isGeneric
     ) {
       sys.description = narrative.shortDescription;
     }
