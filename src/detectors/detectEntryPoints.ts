@@ -92,6 +92,12 @@ const API_PATTERNS: { pattern: RegExp; reason: string; confidence: number }[] =
       reason: "Top-level `server` entry.",
       confidence: 0.78,
     },
+    {
+      // Fullstack apps: server entry inside a named service directory (server/, app/, api/)
+      pattern: /^(server|app|api)\/(index|main|server)\.(ts|js|mts|cts)$/,
+      reason: "Service entry inside server/app/api subdirectory.",
+      confidence: 0.72,
+    },
   ];
 
 const LIB_PATTERNS: { pattern: RegExp; reason: string; confidence: number }[] =

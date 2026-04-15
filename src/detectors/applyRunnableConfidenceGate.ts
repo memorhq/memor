@@ -46,7 +46,9 @@ function hasDir(under: FlatScanEntry[], systemRoot: string, name: string): boole
 }
 
 function isPackageJsonOnly(entryPoints: EntryPoint[]): boolean {
-  if (entryPoints.length === 0) return true;
+  // Empty means "entry point not detected", not "only package.json" — do NOT treat as pkgOnly.
+  // pkgOnly is meant for packages whose only detected entry is the package.json itself.
+  if (entryPoints.length === 0) return false;
   return entryPoints.every(
     (ep) =>
       ep.path.endsWith("package.json") || ep.path.endsWith("/package.json")

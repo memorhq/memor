@@ -1,4 +1,5 @@
-import type { MemorSystem, RepoAnalysis } from "../types";
+import type { MemorSystem, RepoAnalysis, FlowDerivation } from "../types";
+import type { DetectedRoute } from "../scanner/detectRoutes";
 import type { RepoZone, RepoStory } from "./generateRepoStory";
 
 // ── Flow types ────────────────────────────────────────────────────────
@@ -8,6 +9,13 @@ export type FlowStep = {
   systemName?: string;
   zoneName?: string;
   description: string;
+  /** Evidence anchor: relative file path where this step was detected */
+  evidenceFile?: string;
+  /** 1-based line number of the evidence */
+  evidenceLine?: number;
+  /** Detected handler/function name */
+  handlerName?: string;
+  /** @deprecated Interpretive narration — never rendered. Will be removed. */
   whyItMatters?: string;
 };
 
@@ -18,6 +26,12 @@ export type RepoFlow = {
   confidence: "high" | "medium" | "low";
   type: "runtime" | "build" | "dev" | "content" | "rendering";
   isMain?: boolean;
+  /**
+   * "evidence" = steps derived from real detected routes/calls (file+line anchored).
+   * "pattern"  = steps assembled from structural heuristics (no specific code evidence).
+   * Absent = "pattern" (legacy flows not yet migrated).
+   */
+  derivedFrom?: FlowDerivation;
 };
 
 // ── Flow families ─────────────────────────────────────────────────────
@@ -71,11 +85,18 @@ function inferFlowFamilies(
     }
   }
 
-  const libraryModes = ["library-tooling", "library", "unknown"];
   const primaryCount = systems.filter(
     (s) => s.systemTier === "primary"
   ).length;
-  if (libraryModes.includes(repoMode) || (primaryCount <= 2 && !hasWebApp)) {
+  const primarySys = systems.find((s) => s.systemTier === "primary");
+  // Library family: only fires for actual library/package repos.
+  // "unknown" mode alone is not enough — infra, test suites, and docs should NOT get "Import X" flows.
+  const libraryModes = ["library-tooling", "library"];
+  const primaryLooksLikeLibrary =
+    primarySys?.systemRoleHint === "primary-library-package" ||
+    primarySys?.type === "ui-library" ||
+    (primarySys?.type === "shared-package" && (primarySys.connections?.incoming?.length || 0) > 0);
+  if (libraryModes.includes(repoMode) || (primaryLooksLikeLibrary && primaryCount <= 2 && !hasWebApp)) {
     families.add("library");
   }
 
@@ -112,10 +133,6 @@ type FlowPattern = {
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-function sysInZoneFuzzy(ctx: PatternCtx, pattern: RegExp): string[] {
-  const zone = ctx.findZone(pattern);
-  return zone?.systemNames ?? [];
-}
 
 function topConnected(sys: MemorSystem, dir: "outgoing" | "incoming", max = 3): string[] {
   return (sys.connections?.[dir] || []).slice(0, max).map((c) => c.targetSystemName);
@@ -1157,6 +1174,62 @@ function buildUniversalFallback(ctx: PatternCtx): RepoFlow | null {
   };
 }
 
+// ── Evidence-backed route flow builder ───────────────────────────────
+//
+// Converts real detected routes (file + line anchored) into RepoFlow objects.
+// These are the only flows that satisfy the Memor Law: every step points back
+// to a specific file and line in the actual codebase.
+
+function buildEvidenceFlows(systems: MemorSystem[]): RepoFlow[] {
+  const out: RepoFlow[] = [];
+
+  for (const sys of systems) {
+    const routes = sys.detectedRoutes;
+    if (!routes || routes.length === 0) continue;
+
+    // Group by top-level path segment (e.g. /api/users/:id → "users")
+    const groups = new Map<string, DetectedRoute[]>();
+    for (const r of routes) {
+      // Skip USE/middleware mounts — they're not callable endpoints
+      if (r.method === "USE") continue;
+      const seg = r.path.split("/").filter(Boolean)[0] ?? "root";
+      if (!groups.has(seg)) groups.set(seg, []);
+      groups.get(seg)!.push(r);
+    }
+
+    let groupIdx = 0;
+    for (const [seg, groupRoutes] of groups) {
+      // Cap at 5 groups per system and 8 routes per group
+      if (groupIdx >= 5) break;
+      const sample = groupRoutes.slice(0, 8);
+
+      const steps: FlowStep[] = sample.map((r) => ({
+        label: `${r.method} ${r.path}`,
+        systemName: sys.name,
+        description: r.handlerName
+          ? `${r.handlerName}() in ${r.file}`
+          : r.file,
+        evidenceFile: r.file,
+        evidenceLine: r.line,
+        handlerName: r.handlerName,
+      }));
+
+      out.push({
+        id: `evidence-routes-${sys.name}-${seg}`,
+        title: `${sys.name} /${seg} routes`,
+        steps,
+        confidence: "high",
+        type: "runtime",
+        isMain: groupIdx === 0 && out.length === 0,
+        derivedFrom: "evidence",
+      });
+      groupIdx++;
+    }
+  }
+
+  return out;
+}
+
 // ── Main generator ────────────────────────────────────────────────────
 
 export function generateRepoFlows(
@@ -1195,8 +1268,13 @@ export function generateRepoFlows(
     findSysByType: (type) => systems.filter((s) => s.type === type),
   };
 
-  const flows: RepoFlow[] = [];
-  const usedIds = new Set<string>();
+  // ── Evidence-backed route flows (highest priority) ────────────────
+  // These are derived from real detected route registrations (file + line anchored).
+  // Always prepended — never replaced by pattern flows.
+  const evidenceFlows = buildEvidenceFlows(systems);
+
+  const flows: RepoFlow[] = [...evidenceFlows];
+  const usedIds = new Set<string>(evidenceFlows.map((f: RepoFlow) => f.id));
 
   for (const pattern of FLOW_PATTERNS) {
     if (usedIds.has(pattern.id)) continue;
@@ -1219,10 +1297,8 @@ export function generateRepoFlows(
           usedIds.add(pattern.id);
         }
       }
-    } catch (err) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(`[memor] Flow pattern "${pattern.id}" failed:`, err);
-      }
+    } catch {
+      // ignore individual pattern failures
     }
   }
 

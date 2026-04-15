@@ -264,6 +264,10 @@ const ADAPTIVE_SKIP = new Set([
   ".cache", "coverage", "__pycache__", "test", "tests", "__tests__",
   "__mocks__", "fixtures", "e2e", ".github", ".vscode", ".idea",
   "storybook-static", "archived", ".storybook", "vendor", "tmp", "temp",
+  // Non-architectural directories that shouldn't appear as code zones
+  "examples", "example", "demo", "demos", "sample", "samples",
+  "playwright", "playwright-tests", "benchmarks", "benchmark", "bench", "perf",
+  "__fixtures__", "__stories__", "__snapshots__",
 ]);
 
 function inferZoneKind(name: string): InternalZoneKind {

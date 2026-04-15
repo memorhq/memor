@@ -2,6 +2,7 @@ import type { MemorSystem, RepoAnalysis } from "../types";
 import type { Coupling } from "./detectCouplings";
 import type { RepoStory } from "./generateRepoStory";
 import type { RepoFlow } from "./generateRepoFlows";
+import type { ImportGraphStats } from "../scanner/buildImportGraph";
 
 // ── Public types ─────────────────────────────────────────────────────
 
@@ -45,7 +46,8 @@ export function analyzeChangeImpact(
   analysis: RepoAnalysis,
   story: RepoStory,
   couplings: Coupling[],
-  flows?: RepoFlow[]
+  flows?: RepoFlow[],
+  importStats?: ImportGraphStats
 ): ChangeImpactResult | null {
   const { systems } = analysis;
   const selected = systems.find((s) => s.id === systemId);
@@ -203,54 +205,83 @@ export function analyzeChangeImpact(
     score <= 45 ? "contained" :
     score <= 70 ? "broad" : "architectural";
 
-  // ── Zone-level fallback for single-package repos ──────────────────
-  // When there are no system-level connections, show internal zone dependencies
-  // so the Impact view isn't completely empty for standalone apps/libraries.
+  // ── Intra-system fallback for single-package repos ──────────────
+  // When there are no system-level connections, populate directImpacts with
+  // internal data so the Impact view isn't empty for standalone libs/apps.
+  // Priority: (1) import graph hot files, (2) internal zone dependencies.
 
   const totalConnections =
     (selected.connections?.incoming?.length || 0) +
     (selected.connections?.outgoing?.length || 0);
 
   if (directImpacts.length === 0 && indirectImpacts.length === 0 && totalConnections === 0) {
-    const zones = selected.internalStructure?.zones ?? [];
-    const zoneDeps = selected.internalStructure?.dependencies ?? [];
-    if (zones.length >= 2 && zoneDeps.length > 0) {
-      // Group deps by target zone — zones with many incoming deps are high-impact
-      const targetCounts = new Map<string, number>();
-      for (const dep of zoneDeps) {
-        targetCounts.set(dep.targetZoneId, (targetCounts.get(dep.targetZoneId) || 0) + dep.importCount);
-      }
-
-      for (const dep of zoneDeps.slice(0, 6)) {
-        const srcZone = zones.find((z) => z.id === dep.sourceZoneId);
-        const tgtZone = zones.find((z) => z.id === dep.targetZoneId);
-        if (!srcZone || !tgtZone) continue;
-
-        const totalIncoming = targetCounts.get(dep.targetZoneId) || 1;
-        const risk: RiskLevel = totalIncoming >= 10 ? "high" : totalIncoming >= 4 ? "medium" : "low";
-
+    // (1) Import graph: show the most-imported files as high-blast-radius targets
+    if (importStats && importStats.hotFiles.length > 0) {
+      const topFiles = importStats.hotFiles.slice(0, 6);
+      const maxImporters = topFiles[0]?.directImporterCount ?? 1;
+      for (const hf of topFiles) {
+        const pct = Math.round((hf.directImporterCount / importStats.totalFiles) * 100);
+        const risk: RiskLevel =
+          hf.directImporterCount >= maxImporters * 0.7 ? "high" :
+          hf.directImporterCount >= 3 ? "medium" : "low";
+        // Show the leaf name of the path for readability
+        const label = hf.path.split("/").slice(-2).join("/");
         directImpacts.push({
           systemId: selected.id,
-          systemName: `${selected.name} › ${srcZone.label}`,
-          zoneName: tgtZone.label,
-          reason: `${srcZone.label} imports from ${tgtZone.label} (${dep.importCount} import${dep.importCount !== 1 ? "s" : ""}) — changes to ${tgtZone.label} may require updates here.`,
+          systemName: `${selected.name} / ${label}`,
+          zoneName: "Internal",
+          reason: `${hf.directImporterCount} file${hf.directImporterCount !== 1 ? "s" : ""} (${pct}% of codebase) import from this module — changes to its exports propagate widely.`,
           risk,
           impactType: "runtime",
         });
+      }
+      // Boost blast radius score by interconnectedness
+      score = Math.min(score + Math.round(importStats.interconnectednessScore * 0.6), 100);
+    } else {
+      // (2) Zone-level fallback when no import graph available
+      const zones = selected.internalStructure?.zones ?? [];
+      const zoneDeps = selected.internalStructure?.dependencies ?? [];
+      if (zones.length >= 2 && zoneDeps.length > 0) {
+        const targetCounts = new Map<string, number>();
+        for (const dep of zoneDeps) {
+          targetCounts.set(dep.targetZoneId, (targetCounts.get(dep.targetZoneId) || 0) + dep.importCount);
+        }
+        for (const dep of zoneDeps.slice(0, 6)) {
+          const srcZone = zones.find((z) => z.id === dep.sourceZoneId);
+          const tgtZone = zones.find((z) => z.id === dep.targetZoneId);
+          if (!srcZone || !tgtZone) continue;
+          const totalIncoming = targetCounts.get(dep.targetZoneId) || 1;
+          const risk: RiskLevel = totalIncoming >= 10 ? "high" : totalIncoming >= 4 ? "medium" : "low";
+          directImpacts.push({
+            systemId: selected.id,
+            systemName: `${selected.name} › ${srcZone.label}`,
+            zoneName: tgtZone.label,
+            reason: `${srcZone.label} imports from ${tgtZone.label} (${dep.importCount} import${dep.importCount !== 1 ? "s" : ""}) — changes to ${tgtZone.label} may require updates here.`,
+            risk,
+            impactType: "runtime",
+          });
+        }
       }
     }
   }
 
   // ── Confidence ─────────────────────────────────────────────────────
 
+  // Re-derive blast radius level after import graph score boost
+  const finalBlastLevel =
+    score <= 20 ? "local" :
+    score <= 45 ? "contained" :
+    score <= 70 ? "broad" : "architectural";
+
   const confidence: "high" | "medium" | "low" =
+    importStats ? "medium" :             // import-graph analysis is file-level, not cross-system
     totalConnections >= 6 ? "high" :
     totalConnections >= 2 ? "medium" : "low";
 
   // ── Summary ────────────────────────────────────────────────────────
 
   const summary = generateSummary(
-    selected, directImpacts, indirectImpacts, blastRadiusLevel, impactedZones, systems
+    selected, directImpacts, indirectImpacts, finalBlastLevel, impactedZones, systems, importStats
   );
 
   return {
@@ -260,7 +291,7 @@ export function analyzeChangeImpact(
     directImpacts: directImpacts.slice(0, 10),
     indirectImpacts: indirectImpacts.slice(0, 10),
     blastRadiusScore: score,
-    blastRadiusLevel,
+    blastRadiusLevel: finalBlastLevel,
     confidence,
   };
 }
@@ -581,22 +612,34 @@ function generateSummary(
   indirect: IndirectImpact[],
   level: string,
   zones: Set<string>,
-  allSystems: MemorSystem[]
+  allSystems: MemorSystem[],
+  importStats?: ImportGraphStats
 ): string {
-  const highCount = direct.filter((d) => d.risk === "high").length;
   const highNames = direct.filter((d) => d.risk === "high").slice(0, 2).map((d) => d.systemName);
   const zoneCount = zones.size;
   const name = selected.name;
   const shape = describeChangeShape(selected);
   const shapeNote = shape ? ` (${shape})` : "";
 
-  // Self-contained system: no connections at all
+  // Self-contained system: no cross-system connections
   const isSelfContained =
-    direct.length === 0 && indirect.length === 0 &&
     (selected.connections?.incoming?.length || 0) === 0 &&
     (selected.connections?.outgoing?.length || 0) === 0;
 
   if (isSelfContained) {
+    // If we have import graph data, describe internal blast radius
+    if (importStats && importStats.hotFiles.length > 0) {
+      const topFile = importStats.hotFiles[0];
+      const topLabel = topFile.path.split("/").slice(-1)[0];
+      const highRiskCount = direct.filter((d) => d.risk === "high").length;
+      const pct = Math.round((topFile.directImporterCount / importStats.totalFiles) * 100);
+      if (highRiskCount >= 2) {
+        return `${name}${shapeNote} is internally interconnected — ${highRiskCount} core module${highRiskCount !== 1 ? "s" : ""} are imported by most of the codebase (e.g. ${topLabel} used by ${pct}% of files). Changes to shared modules propagate widely within the repo.`;
+      }
+      return `${name}${shapeNote} analyzed ${importStats.totalFiles} source files. Core module "${topLabel}" is imported by ${topFile.directImporterCount} file${topFile.directImporterCount !== 1 ? "s" : ""} (${pct}%) — changes here have the widest internal reach.`;
+    }
+
+    // No import data: fall back to zone-based or generic message
     const internalZones = selected.internalStructure?.zones ?? [];
     const zoneNames = internalZones
       .filter((z) => z.kind !== "support" && z.kind !== "config")

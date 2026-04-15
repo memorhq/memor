@@ -36,6 +36,8 @@ import { slugify, parseJsonLoose } from "../utils/text";
 import { normalizeRepoRoot } from "../utils/path";
 import { readTextSafe } from "../utils/file";
 import { detectAppInternalUnits } from "../detectors/detectAppInternalUnits";
+import { detectRoutes } from "../scanner/detectRoutes";
+import { detectDBOperations } from "../scanner/detectDBOps";
 
 // ── Per-system tech detection ─────────────────────────────────────────
 
@@ -370,6 +372,17 @@ export async function analyzeRepo(repoPath: string): Promise<AnalyzeResult> {
   promoteForRepoMode(sortedSystems, repoMode, repoName);
   detectRepoCenterSystems(sortedSystems, repoMode, repoName);
 
+  // Ensure at least one primary: if nothing was promoted (e.g., single infra/docs repo),
+  // promote the highest-scoring non-support system so the repo is never all-secondary.
+  const primaryCount = sortedSystems.filter((s) => s.systemTier === "primary").length;
+  if (primaryCount === 0) {
+    const candidate = sortedSystems.find((s) => s.type !== "support-system");
+    if (candidate) {
+      candidate.systemTier = "primary";
+      candidate.importanceScore = Math.max(candidate.importanceScore, 0.7);
+    }
+  }
+
   // Phase 3: infer support roles for non-center systems
   for (const s of sortedSystems) {
     s.inferredSupportRole = inferSupportRole(s, repoMode);
@@ -396,6 +409,19 @@ export async function analyzeRepo(repoPath: string): Promise<AnalyzeResult> {
   for (const s of sortedSystems) {
     s.internalStructure =
       (await buildInternalArchitecture(s, rootPath)) ?? undefined;
+  }
+
+  // Phase 6b: route + DB detection for API-surface and runnable systems
+  // Only run on systems that could plausibly have routes or DB calls.
+  // These are best-effort and never block analysis on failure.
+  for (const s of sortedSystems) {
+    if (s.type === "support-system") continue;
+    const sysAbs = s.rootPath === "." ? rootPath : path.resolve(rootPath, s.rootPath);
+    const looksLikeRoute = s.type === "api-service" || s.type === "web-app" || s.type === "worker";
+    if (looksLikeRoute) {
+      try { s.detectedRoutes = await detectRoutes(sysAbs); } catch { /* best-effort */ }
+    }
+    try { s.detectedDBOps = await detectDBOperations(sysAbs); } catch { /* best-effort */ }
   }
 
   // Phase 7: for product-web-app repos, decompose internal architecture

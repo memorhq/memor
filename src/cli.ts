@@ -11,6 +11,8 @@ import { generateReadingOrder } from "./builders/generateReadingOrder";
 import { detectCouplings } from "./builders/detectCouplings";
 import { analyzeChangeImpact } from "./builders/analyzeChangeImpact";
 import type { ChangeImpactResult } from "./builders/analyzeChangeImpact";
+import { buildImportGraphStats } from "./scanner/buildImportGraph";
+import type { ImportGraphStats } from "./scanner/buildImportGraph";
 import { generateAhaSummary } from "./builders/generateAhaSummary";
 import { assessAnalysisQuality } from "./builders/assessAnalysisQuality";
 import type { AnalysisQuality } from "./builders/assessAnalysisQuality";
@@ -195,9 +197,28 @@ async function main(): Promise<void> {
 
   // ── Pre-compute change impact for all systems ─
 
+  // Build import graphs for self-contained systems (no cross-system connections)
+  // so the Impact view shows real file-level blast radius instead of "self-contained".
+  const importGraphCache = new Map<string, ImportGraphStats>();
+  for (const sys of analysis.systems) {
+    const totalConns =
+      (sys.connections?.incoming?.length || 0) +
+      (sys.connections?.outgoing?.length || 0);
+    if (totalConns === 0 && sys.systemTier === "primary") {
+      const sysAbsRoot = path.join(repoPath, sys.rootPath === "." ? "" : sys.rootPath);
+      try {
+        const stats = await buildImportGraphStats(sysAbsRoot);
+        if (stats.totalFiles > 0) importGraphCache.set(sys.id, stats);
+      } catch {
+        // Import graph is best-effort — never fail the analysis
+      }
+    }
+  }
+
   const impactResults: Record<string, ChangeImpactResult> = {};
   for (const sys of analysis.systems) {
-    const result = analyzeChangeImpact(sys.id, analysis, repoStory, couplings, flows);
+    const importStats = importGraphCache.get(sys.id);
+    const result = analyzeChangeImpact(sys.id, analysis, repoStory, couplings, flows, importStats);
     if (result) impactResults[sys.id] = result;
   }
 

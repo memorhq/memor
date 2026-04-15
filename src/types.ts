@@ -154,6 +154,16 @@ export type MemorSystem = {
   connections?: SystemConnections;
   /** Internal zone structure for intra-system architecture */
   internalStructure?: InternalStructure;
+  /**
+   * HTTP routes detected from actual source code (Express, Fastify, NestJS, etc.)
+   * Each entry traces back to a real file + line. Never synthesized.
+   */
+  detectedRoutes?: import("./scanner/detectRoutes").DetectedRoute[];
+  /**
+   * Database operations detected from actual source code (Prisma, Drizzle, Mongoose, etc.)
+   * Each entry traces back to a real file + line. Never synthesized.
+   */
+  detectedDBOps?: import("./scanner/detectDBOps").DBOperation[];
 };
 
 export type SystemType =
@@ -248,6 +258,8 @@ export type FlowSkeleton = {
   description: string;
   steps: FlowStep[];
   confidence: number;
+  /** How this flow was derived. "evidence" = from detected routes/calls. "pattern" = structural heuristic. */
+  derivedFrom?: FlowDerivation;
 };
 
 export type FlowStep = {
@@ -261,8 +273,18 @@ export type FlowStep = {
     | "external"
     | "config"
     | "unknown";
+  /** Legacy field — prefer `evidenceFile` for new code */
   path?: string;
+  /** Relative file path this step was detected from (evidence anchor) */
+  evidenceFile?: string;
+  /** 1-based line number of the evidence in `evidenceFile` */
+  evidenceLine?: number;
+  /** Detected handler/function name (for route steps) */
+  handlerName?: string;
 };
+
+/** Whether this flow was derived from detected code or assembled from structural patterns */
+export type FlowDerivation = "evidence" | "pattern";
 
 // ── System focus view model ───────────────────────────────────────────
 

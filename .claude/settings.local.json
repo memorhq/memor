@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "*",
       "Bash(ls -la /Users/mukur/Documents/open_source/memor/src/*.ts)",
       "WebFetch(domain:www.memor.dev)",
       "Read(//Users/mukur/Documents/open_source/**)",
@@ -10,7 +11,15 @@
       "Bash(npm run:*)",
       "Bash(node dist/cli.js /Users/mukur/Documents/open_source/express --export /tmp/memor_express.html)",
       "Bash(grep -v \"^$\")",
-      "Bash(node dist/cli.js /Users/mukur/Documents/open_source/react --export /tmp/memor_react.html)"
+      "Bash(node dist/cli.js /Users/mukur/Documents/open_source/react --export /tmp/memor_react.html)",
+      "Bash(grep -E \"^packages$\")",
+      "Bash(node dist/cli.js /Users/mukur/Documents/open_source/storybook --output /tmp/memor_storybook_test.json)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(node -e ':*)",
+      "Read",
+      "Edit",
+      "Write",
+      "Bash(*)"
     ]
   }
 }

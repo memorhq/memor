@@ -102,11 +102,34 @@ function buildHeadline(
   // unknown fallback — derive from system composition
   const runnables = analysis.systems.filter((s) => s.runtimeRole === "runnable");
   const shared = analysis.systems.filter((s) => s.runtimeRole === "consumable").length;
-  if (runnables.length > 0) {
-    const appNames = runnables.slice(0, 3).map((s) => s.name).join(", ");
-    return `${repoName} is a monorepo with ${appNames} and ${shared} shared packages across ${story.zones.length} zones.`;
+
+  // Single-system repos: describe the system itself, not a container
+  if (analysis.systems.length === 1) {
+    const sys = analysis.systems[0];
+    const tech = (sys.detectedTech ?? []).filter((t) => !/^(TypeScript|JavaScript)$/i.test(t));
+    const techNote = tech.length > 0 ? ` built with ${tech.slice(0, 2).join(" and ")}` : "";
+    if (sys.type === "api-service") return `${repoName} is an API service${techNote}.`;
+    if (sys.type === "web-app") return `${repoName} is a web application${techNote}.`;
+    if (sys.type === "docs-site") return `${repoName} is a documentation site${techNote}.`;
+    if (sys.type === "infra") return `${repoName} is an infrastructure repository.`;
+    if (sys.type === "worker") return `${repoName} is a background worker service${techNote}.`;
+    if (sys.type === "shared-package") return `${repoName} is a shared package${techNote}.`;
+    return `${repoName} is a ${story.repoType.toLowerCase()}${techNote}.`;
   }
-  return `${repoName} is a ${story.repoType.toLowerCase()} with ${analysis.systems.length} systems across ${story.zones.length} zones.`;
+
+  // Multi-system repos
+  if (runnables.length > 0) {
+    const label = runnables.length === 1 ? "app" : "monorepo";
+    const article = runnables.length === 1 ? "an" : "a";
+    const appNames = runnables.slice(0, 3).map((s) => s.name).join(", ");
+    const sharedNote = shared > 0 ? ` backed by ${shared} shared package${shared !== 1 ? "s" : ""}` : "";
+    const zoneCount = story.zones.length;
+    const zoneNote = zoneCount > 0 ? ` across ${zoneCount} zone${zoneCount !== 1 ? "s" : ""}` : "";
+    return `${repoName} is ${article} ${label} with ${appNames}${sharedNote}${zoneNote}.`;
+  }
+  const sysCount = analysis.systems.length;
+  const zoneCount = story.zones.length;
+  return `${repoName} is a ${story.repoType.toLowerCase()} with ${sysCount} system${sysCount !== 1 ? "s" : ""}${zoneCount > 0 ? ` across ${zoneCount} zone${zoneCount !== 1 ? "s" : ""}` : ""}.`;
 }
 
 function buildSubheadline(story: RepoStory): string {

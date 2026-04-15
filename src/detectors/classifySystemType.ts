@@ -147,15 +147,42 @@ export async function classifySystemType(
       }
     : {};
 
+  // Direct + dev deps only (not peerDeps) — used for strong "this IS the framework" signals.
+  // peerDeps mean "host app must provide this", not "this package IS built on it".
+  const directDeps: Record<string, string> = pkg
+    ? {
+        ...((pkg.dependencies as Record<string, string>) || {}),
+        ...((pkg.devDependencies as Record<string, string>) || {}),
+      }
+    : {};
+
+  // Runtime deps only (dependencies field, not devDeps or peerDeps).
+  // An app built ON a framework lists it in dependencies at runtime.
+  // A framework package building itself lists it in devDeps (for tests/build), not runtime deps.
+  const runtimeDeps: Record<string, string> =
+    (pkg?.dependencies as Record<string, string>) || {};
+
   const hasDep = (n: string) => Object.prototype.hasOwnProperty.call(deps, n);
+  const hasDirectDep = (n: string) => Object.prototype.hasOwnProperty.call(directDeps, n);
+  const hasRuntimeDep = (n: string) => Object.prototype.hasOwnProperty.call(runtimeDeps, n);
 
   const relFromRepo = path.relative(repoRoot, systemRoot);
   const posixRel =
     relFromRepo === "" ? "." : relFromRepo.split(path.sep).join("/");
+
+  // Directories that are unconventional monorepo source roots (e.g., storybook uses `code/`,
+  // some repos use `libs/`, `modules/`, `crates/`). Packages nested inside these dirs are
+  // monorepo sub-packages, not standalone services.
+  const UNCONVENTIONAL_MONO_TOPS = new Set(["code", "libs", "modules", "crates"]);
+  const firstSegment = posixRel.split("/")[0];
+  const isUnderUnconventionalMonorepoDir =
+    UNCONVENTIONAL_MONO_TOPS.has(firstSegment) && posixRel.includes("/");
+
   const isUnderPackages =
     posixRel.startsWith("packages/") ||
     posixRel.split("/")[0] === "packages" ||
-    posixRel.includes("/packages/"); // nested monorepos: code/packages/foo, apps/packages/foo
+    posixRel.includes("/packages/") || // nested monorepos: code/packages/foo, apps/packages/foo
+    isUnderUnconventionalMonorepoDir;  // storybook: code/lib/cli-sb, code/renderers/server
 
   const folderBackendHint = folderNameSuggestsBackendService(
     ctx.candidateFolderName
@@ -204,7 +231,7 @@ export async function classifySystemType(
 
   const nest =
     under.some((e) => e.name === "nest-cli.json" && !e.isDirectory) ||
-    hasDep("@nestjs/core");
+    hasRuntimeDep("@nestjs/core"); // runtime dep only — framework pkgs list it in devDeps/peerDeps, not dependencies
 
   const expressLike =
     hasDep("express") ||
@@ -278,6 +305,8 @@ export async function classifySystemType(
     hasFile(systemRoot, under, (r) =>
       /(^|\/)(Dockerfile|docker-compose\.ya?ml)$/.test(r.replace(/\\/g, "/"))
     ) ||
+    // Terraform files at any depth (.tf, .tfvars) — the repo itself IS the terraform project
+    under.some((e) => !e.isDirectory && /\.tf(vars)?$/.test(e.name)) ||
     hasDirName(systemRoot, under, "terraform") ||
     hasDirName(systemRoot, under, "k8s") ||
     hasDirName(systemRoot, under, "kubernetes") ||
@@ -382,6 +411,22 @@ export async function classifySystemType(
   } else if (hasPythonManifest) {
     s["shared-package"] += 0.25;
     s["docs-site"] *= 0.4;
+  }
+
+  // Packages with Storybook stories files are UI component packages, even without
+  // a full Storybook dev dep (they export components consumed by a stories runner).
+  // Guard: only boost small packages (≤15 JS/TS files). Large packages (framework
+  // internals, renderers, addons) also contain stories as examples/tests but are NOT
+  // UI libraries — their file count reveals the difference.
+  const hasStoriesFiles = under.some(
+    (e) => !e.isDirectory && /\.stories\.(jsx?|tsx?|mdx)$/.test(e.name)
+  );
+  const totalCodeFiles = under.filter(
+    (e) => !e.isDirectory && /\.(tsx?|jsx?)$/.test(e.name)
+  ).length;
+  if (hasStoriesFiles && isUnderPackages && !nest && totalCodeFiles <= 15) {
+    s["ui-library"] += 0.42;
+    s["shared-package"] -= 0.1;
   }
 
   if (

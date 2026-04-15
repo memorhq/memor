@@ -109,6 +109,7 @@ export function detectRepoMode(
   const webAppCount = countBy(systems, (s) => s.type === "web-app");
   const apiCount = countBy(systems, (s) => s.type === "api-service");
   const sharedPkgCount = countBy(systems, (s) => s.type === "shared-package");
+  const uiLibCount = countBy(systems, (s) => s.type === "ui-library");
   const workerCount = countBy(systems, (s) => s.type === "worker");
   const isMonorepo = summary.detectedRepoStyle === "monorepo";
   const nameBlob = allNames(systems);
@@ -134,6 +135,11 @@ export function detectRepoMode(
     )
   ) {
     scores["surface-platform"] += 0.14;
+  }
+  // Multiple surfaces + many shared packages, even if all surfaces have the same archetype
+  // (e.g., design-system monorepos with 5+ identical web-apps all backed by UI packages)
+  if (runnableCount >= 3 && sharedPkgCount >= 5) {
+    scores["surface-platform"] += 0.44;
   }
 
   // ── product-domain-machine ────────────────────────────────────────
@@ -218,6 +224,12 @@ export function detectRepoMode(
   // Penalize library-tooling if there are too many packages (that's framework territory)
   if (n > 12) {
     scores["library-tooling"] -= 0.18;
+  }
+  // Large UI component library monorepos: many ui-library packages → library-tooling, not framework-core.
+  // These have no runnable apps, just many small React/Vue component packages (Storybook-driven).
+  if (uiLibCount >= 5 && runnableCount === 0) {
+    scores["library-tooling"] += 0.5;
+    scores["framework-core"] *= 0.45;
   }
 
   // ── workflow-platform ─────────────────────────────────────────────
@@ -405,7 +417,27 @@ export function buildRepoNarrative(
     );
   }
 
-  // Unknown mode — still try to be specific
+  // Unknown mode — still try to be specific based on dominant system type
+  const infraCount = systems.filter((s) => s.type === "infra").length;
+  const docsCount = systems.filter((s) => s.type === "docs-site").length;
+  // Stricter test detection: name must START with or END with test/spec/e2e keywords.
+  // Exclude api-service and web-app systems — they're apps that happen to have tests, not test suites.
+  const testCount = systems.filter(
+    (s) =>
+      s.type !== "api-service" && s.type !== "web-app" &&
+      /^(tests?|specs?|e2e|cypress|playwright)[-_.]|[-_.](tests?|specs?|e2e)$|^(tests?|specs?|e2e)$|[-_](tests?|e2e)$/i.test(s.name)
+  ).length;
+
+  if (infraCount === n || (infraCount >= 1 && n <= 2)) {
+    return `${repoName} is an infrastructure repository${techPhrase ? `, ${techPhrase}` : ""} — Terraform, Docker, or cloud configuration. Use the Structure view to explore resource definitions.`;
+  }
+  if (docsCount >= 1 && n <= 2) {
+    return `${repoName} is a documentation site${techPhrase ? `, ${techPhrase}` : ""}. Use the Structure view to explore content organization.`;
+  }
+  if (testCount >= 1 && n <= 3) {
+    return `${repoName} is a test suite${techPhrase ? `, ${techPhrase}` : ""}. Use the Structure view to explore test organization and coverage.`;
+  }
+
   const rn = repoName.toLowerCase().replace(/[^a-z0-9]/g, "");
   const distinctPrimaries = primaryNames.filter(
     (p) => p.toLowerCase().replace(/[^a-z0-9]/g, "") !== rn

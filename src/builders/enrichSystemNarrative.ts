@@ -24,6 +24,8 @@ function roleHintSentence(hint: SystemRoleHint, sys: MemorSystem): string {
     case "framework-tooling-package":
       return `${name} provides framework tooling for development, testing, or code generation.`;
     case "primary-library-package":
+      // Prefer the author's own description when available — it's more specific than "primary library package"
+      if (sys.packageDescription) return `${name}: ${sys.packageDescription}`;
       return `${name}${techNote} is the primary library package${depNote}.`;
     case "workflow-core-package":
       return `${name} is the core workflow engine, handling scheduling and task execution${depNote}.`;
