@@ -291,7 +291,18 @@ export type RepoFlowSummary = {
   title: string;
   type: string;
   confidence: string;
-  steps: { label: string; description: string }[];
+  isMain?: boolean;
+  derivedFrom?: string;
+  structuralReason?: string;
+  steps: {
+    label: string;
+    description: string;
+    systemName?: string;
+    zoneName?: string;
+    evidenceFile?: string;
+    evidenceLine?: number;
+    handlerName?: string;
+  }[];
 };
 
 export type ReadingStepSummary = {

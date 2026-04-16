@@ -32,6 +32,12 @@ export type RepoFlow = {
    * Absent = "pattern" (legacy flows not yet migrated).
    */
   derivedFrom?: FlowDerivation;
+  /**
+   * For pattern flows: the specific structural conditions that triggered this flow.
+   * Format: concise facts, not narration. "web-product family · web-app: my-app · api-service: api"
+   * Absent for evidence flows (they have file:line anchors instead).
+   */
+  structuralReason?: string;
 };
 
 // ── Flow families ─────────────────────────────────────────────────────
@@ -212,12 +218,23 @@ const FLOW_PATTERNS: FlowPattern[] = [
 
       if (steps.length < 2) return { id: "web-user-journey", title: "User journey", steps: [], confidence: "low" as const, type: "runtime" as const };
 
+      const webAppNames = ctx.findSysByType("web-app").map((s) => s.name).slice(0, 2);
+      const matchedZones = [
+        ctx.findZone(/marketing|public|landing/i)?.name,
+        ctx.findZone(/auth|onboarding|login/i)?.name,
+        ctx.findZone(/dashboard|product.*surface/i)?.name,
+      ].filter(Boolean);
       return {
         id: "web-user-journey",
         title: "User journey",
         steps,
         confidence: steps.length >= 3 ? "high" : "medium",
         type: "runtime",
+        structuralReason: [
+          "web-product family",
+          webAppNames.length ? `web-app: ${webAppNames.join(", ")}` : null,
+          matchedZones.length ? `zones: ${matchedZones.join(", ")}` : null,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -297,6 +314,12 @@ const FLOW_PATTERNS: FlowPattern[] = [
         steps,
         confidence: steps.length >= 4 ? "high" : "medium",
         type: "runtime",
+        structuralReason: [
+          "web-product family",
+          mainApp ? `web-app: ${mainApp.name}` : null,
+          (apiSys ?? apiZone) ? `api: ${apiSys?.name ?? apiZone?.name}` : null,
+          (dataSys ?? dataZone) ? `data: ${dataSys?.name ?? dataZone?.name}` : null,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -333,6 +356,11 @@ const FLOW_PATTERNS: FlowPattern[] = [
         ],
         confidence: "medium" as const,
         type: "dev" as const,
+        structuralReason: [
+          "web-product family",
+          mainApp ? `primary app: ${mainApp.name}` : null,
+          `${webApps.length} web-app system${webApps.length !== 1 ? "s" : ""}`,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -383,6 +411,11 @@ const FLOW_PATTERNS: FlowPattern[] = [
         ],
         confidence: "high",
         type: "runtime",
+        structuralReason: [
+          "frontend-framework family",
+          `core: ${coreZone.name} (${(coreZone.systemNames || []).slice(0, 2).join(", ") || "no packages"})`,
+          `renderer: ${rendererZone.name} (${renderers.join(", ") || "no packages"})`,
+        ].join(" · "),
       };
     },
   },
@@ -456,6 +489,12 @@ const FLOW_PATTERNS: FlowPattern[] = [
         steps,
         confidence: "high",
         type: "runtime",
+        structuralReason: [
+          "backend-framework family",
+          platformNames.length ? `platform adapters: ${platformNames.join(", ")}` : null,
+          coreSys ? `core: ${coreSys.name}` : null,
+          commonSys ? `common: ${commonSys.name}` : null,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -499,6 +538,12 @@ const FLOW_PATTERNS: FlowPattern[] = [
         ],
         confidence: "medium",
         type: "runtime",
+        structuralReason: [
+          "backend-framework family",
+          `center: ${coreSys.name}`,
+          `${coreSys.connections?.incoming?.length ?? 0} incoming connections`,
+          dependents.length ? `dependents: ${dependents.slice(0, 3).join(", ")}` : null,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -607,6 +652,12 @@ const FLOW_PATTERNS: FlowPattern[] = [
         steps,
         confidence: steps.length >= 4 ? "high" : "medium",
         type: "runtime",
+        structuralReason: [
+          "library family",
+          `center: ${center.name}`,
+          consumers.length ? `${consumers.length} consumer${consumers.length !== 1 ? "s" : ""}` : null,
+          deps.length ? `dependencies: ${deps.slice(0, 2).join(", ")}` : null,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -683,6 +734,12 @@ const FLOW_PATTERNS: FlowPattern[] = [
         steps,
         confidence: isStateLike ? "high" : "medium",
         type: "runtime",
+        structuralReason: [
+          "library family",
+          `center: ${center.name}`,
+          isStateLike ? "state/store pattern detected" : "processing library shape",
+          `${center.connections?.incoming?.length ?? 0} incoming connections`,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -735,6 +792,12 @@ const FLOW_PATTERNS: FlowPattern[] = [
         steps,
         confidence: "high",
         type: "dev",
+        structuralReason: [
+          `create-* scaffolder: ${scaffolder.name}`,
+          `center: ${ctx.centerName}`,
+          integrationZone ? `integrations: ${integrationZone.name}` : null,
+          adapterZone ? `adapters: ${adapterZone.name}` : null,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -792,6 +855,12 @@ const FLOW_PATTERNS: FlowPattern[] = [
         steps,
         confidence: "high",
         type: "build",
+        structuralReason: [
+          compilerZone ? `compiler zone: ${compilerZone.name}` : null,
+          runtimeZone ? `runtime zone: ${runtimeZone.name}` : null,
+          hasServer ? "server entry detected" : null,
+          `center: ${ctx.centerName}`,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -826,6 +895,11 @@ const FLOW_PATTERNS: FlowPattern[] = [
         ],
         confidence: "medium",
         type: "content",
+        structuralReason: [
+          `content zone: ${contentZone.name}`,
+          contentPkgs.length ? `packages: ${contentPkgs.join(", ")}` : null,
+          `center: ${ctx.centerName}`,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -864,6 +938,11 @@ const FLOW_PATTERNS: FlowPattern[] = [
         ],
         confidence: "medium",
         type: "runtime",
+        structuralReason: [
+          `integration/plugin zone: ${intZone.name}`,
+          `${intZone.systemNames?.length ?? 0} registered integrations`,
+          `sample: ${sample}`,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -898,6 +977,11 @@ const FLOW_PATTERNS: FlowPattern[] = [
         ],
         confidence: "medium",
         type: "dev",
+        structuralReason: [
+          `devtools zone: ${devZone.name}`,
+          devPkgs.length ? `packages: ${devPkgs.join(", ")}` : null,
+          `center: ${ctx.centerName}`,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -931,6 +1015,11 @@ const FLOW_PATTERNS: FlowPattern[] = [
         ],
         confidence: "medium",
         type: "dev",
+        structuralReason: [
+          `editor-tooling zone: ${ltZone.name}`,
+          ltPkgs.length ? `packages: ${ltPkgs.join(", ")}` : null,
+          `center: ${ctx.centerName}`,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -1015,6 +1104,13 @@ const FLOW_PATTERNS: FlowPattern[] = [
         steps,
         confidence: "medium" as const,
         type: "runtime" as const,
+        structuralReason: [
+          `tech: ${frameworkNote}`,
+          mainSys ? `system: ${mainSys.name}` : null,
+          serverZone ? `server zone: ${serverZone.label} (${serverZone.fileCount} files)` : null,
+          clientZone ? `client zone: ${clientZone.label} (${clientZone.fileCount} files)` : null,
+          routesZone ? `routes zone: ${routesZone.label}` : null,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -1048,6 +1144,10 @@ const FLOW_PATTERNS: FlowPattern[] = [
         ],
         confidence: "low",
         type: "build",
+        structuralReason: [
+          `build/tooling zone: ${buildZone.name}`,
+          buildPkgs.length ? `packages: ${buildPkgs.join(", ")}` : null,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -1104,6 +1204,12 @@ const FLOW_PATTERNS: FlowPattern[] = [
         steps,
         confidence: "high",
         type: "rendering",
+        structuralReason: [
+          "frontend-framework family · single-package shape",
+          compilerZone ? `compiler zone: ${compilerZone.name}` : null,
+          internalZone ? `runtime zone: ${internalZone.name}` : null,
+          hasServer ? "server zone detected" : null,
+        ].filter(Boolean).join(" · "),
       };
     },
   },
@@ -1171,6 +1277,11 @@ function buildUniversalFallback(ctx: PatternCtx): RepoFlow | null {
     steps,
     confidence: "low",
     type: "runtime",
+    structuralReason: [
+      "no family matched",
+      ctx.center ? `center: ${ctx.centerName}` : `${primary.length} primary systems`,
+      secondary.length ? `${secondary.length} secondary systems` : null,
+    ].filter(Boolean).join(" · "),
   };
 }
 
@@ -1273,11 +1384,37 @@ export function generateRepoFlows(
   // Always prepended — never replaced by pattern flows.
   const evidenceFlows = buildEvidenceFlows(systems);
 
+  // Track which system types have evidence so we can suppress redundant pattern flows.
+  // A pattern flow about HTTP request lifecycle is noise if we already have real route evidence
+  // for the system it would describe.
+  const systemTypesWithEvidence = new Set(
+    systems
+      .filter((s) => s.detectedRoutes && s.detectedRoutes.length > 0)
+      .map((s) => s.type)
+  );
+  // Pattern flow IDs that are redundant when we have real route evidence for HTTP systems.
+  // These flows are template narratives about "request arrives → router → DB → response" —
+  // exactly what evidence flows replace with real file:line data.
+  const HTTP_TEMPLATE_PATTERNS = new Set([
+    "web-user-journey",    // Browser → Frontend → API → DB (generic, no code anchors)
+    "web-data-flow",       // User action → API handles → DB → Render (generic)
+    "express-server-flow", // HTTP request arrives → Route handlers → DB → Response (generic)
+  ]);
+  const hasHttpEvidence =
+    systemTypesWithEvidence.has("api-service") ||
+    systemTypesWithEvidence.has("web-app") ||
+    systemTypesWithEvidence.has("worker");
+
   const flows: RepoFlow[] = [...evidenceFlows];
   const usedIds = new Set<string>(evidenceFlows.map((f: RepoFlow) => f.id));
 
   for (const pattern of FLOW_PATTERNS) {
     if (usedIds.has(pattern.id)) continue;
+
+    // Suppress HTTP template patterns when we have real route evidence.
+    // The Memor Law: a template flow alongside evidence flows is noise, not signal.
+    if (hasHttpEvidence && HTTP_TEMPLATE_PATTERNS.has(pattern.id)) continue;
+
     try {
       if (pattern.match(ctx)) {
         const flow = pattern.build(ctx);

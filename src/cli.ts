@@ -170,12 +170,16 @@ async function main(): Promise<void> {
     type: f.type,
     confidence: f.confidence,
     isMain: f.isMain,
+    derivedFrom: f.derivedFrom,
+    structuralReason: f.structuralReason,
     steps: f.steps.map((s) => ({
       label: s.label,
       description: s.description,
-      whyItMatters: s.whyItMatters,
       systemName: s.systemName,
       zoneName: s.zoneName,
+      evidenceFile: s.evidenceFile,
+      evidenceLine: s.evidenceLine,
+      handlerName: s.handlerName,
     })),
   }));
 

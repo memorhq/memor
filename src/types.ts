@@ -19,6 +19,11 @@ export type RepoAnalysis = {
   systems: MemorSystem[];
   ignoredPaths: string[];
   summary: RepoSummary;
+  /**
+   * Deterministic repo purpose inferred from file density, config files,
+   * package.json scripts/dependencies. Never guessed. Every signal has evidence.
+   */
+  inferredRepoPurpose?: import("./scanner/detectRepoPurpose").InferredRepoPurpose;
 };
 
 export type RepoSummary = {

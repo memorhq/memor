@@ -333,6 +333,31 @@ function CenterSeedCard({ data }: { data: AppData }) {
         </div>
       )}
 
+      {(() => {
+        const purpose = (data.analysis as any).inferredRepoPurpose;
+        if (!purpose) return null;
+        const topSignals = (purpose.signals as Array<{ label: string; evidence: string; weight: number }>)
+          .slice(0, 4);
+        return (
+          <div className="seed-card seed-card-purpose">
+            <span className="seed-label">Purpose</span>
+            <div className="seed-purpose-label">{purpose.label}</div>
+            <div className="seed-purpose-confidence seed-purpose-conf-{purpose.confidence}">
+              {purpose.confidence} confidence
+            </div>
+            <div className="seed-purpose-signals">
+              {topSignals.map((s, i) => (
+                <div key={i} className="seed-purpose-signal">
+                  <span className="seed-purpose-signal-dot">·</span>
+                  <span className="seed-purpose-signal-text">{s.label}</span>
+                  <code className="seed-purpose-signal-ev">{s.evidence}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {!hasFlow && !hasEntry && !hasZones && !hasSignals && (
         <div className="seed-card seed-card-sparse">
           <div className="seed-sparse">Use Structure, Flow, or Impact views for deeper analysis.</div>
@@ -1208,16 +1233,27 @@ function FlowView({ data, onBack }: { data: AppData; onBack: () => void }) {
       <div className="fv-body">
         <div className="fv-flows-col">
           <span className="fv-flows-label">Flows</span>
-          {rawFlows.map((f, i) => (
-            <button
-              key={f.id}
-              className={`fv-flow-tab${i === activeFlowIdx ? " fv-flow-tab-active" : ""}`}
-              onClick={() => setActiveFlowIdx(i)}
-            >
-              <span className="fv-flow-tab-title">{f.title}</span>
-              <span className="fv-flow-tab-type">{f.type}</span>
-            </button>
-          ))}
+          {rawFlows.map((f, i) => {
+            const isEvidence = (f as any).derivedFrom === "evidence";
+            return (
+              <button
+                key={f.id}
+                className={`fv-flow-tab${i === activeFlowIdx ? " fv-flow-tab-active" : ""}${isEvidence ? " fv-flow-tab-evidence" : " fv-flow-tab-inferred"}`}
+                onClick={() => setActiveFlowIdx(i)}
+              >
+                <div className="fv-flow-tab-row">
+                  <span className="fv-flow-tab-title">{f.title}</span>
+                  <span
+                    className={`fv-flow-origin-tag${isEvidence ? " fv-origin-evidence" : " fv-origin-inferred"}`}
+                    data-reason={!isEvidence ? ((f as any).structuralReason ?? undefined) : undefined}
+                  >
+                    {isEvidence ? "EVIDENCE" : "INFERRED"}
+                  </span>
+                </div>
+                <span className="fv-flow-tab-type">{f.type}</span>
+              </button>
+            );
+          })}
         </div>
         <div className="fv-timeline-col">
           {steps.map((step, i) => {
@@ -1243,6 +1279,16 @@ function FlowView({ data, onBack }: { data: AppData; onBack: () => void }) {
                         <span className={`fv-impact-badge fv-impact-${impact.level}`}>{impact.label}</span>
                       )}
                     </div>
+                    {/* Evidence anchor — shown ONLY when this step is grounded in real code */}
+                    {(step as any).evidenceFile && (
+                      <div className="fv-step-evidence-anchor">
+                        <span className="fv-evidence-dot">◉</span>
+                        <code className="fv-evidence-loc">
+                          {(step as any).evidenceFile}{(step as any).evidenceLine ? `:${(step as any).evidenceLine}` : ""}
+                        </code>
+                        <span className="fv-evidence-label">real code</span>
+                      </div>
+                    )}
                     {step.description && (
                       <span className="fv-step-desc">{step.description}</span>
                     )}
@@ -1286,12 +1332,38 @@ function FlowView({ data, onBack }: { data: AppData; onBack: () => void }) {
 
               <h3 className="fv-ctx-title">{activeStep.label}</h3>
 
+              {/* Derivation source — shown first, before any interpretation */}
+              {(activeStep as any).evidenceFile ? (
+                <div className="fv-ctx-derivation fv-ctx-derivation-evidence">
+                  <span className="fv-ctx-deriv-icon">◉</span>
+                  <div className="fv-ctx-deriv-body">
+                    <span className="fv-ctx-deriv-label">Detected from real code</span>
+                    <code className="fv-ctx-deriv-loc" onClick={(e) => copyPath((activeStep as any).evidenceFile, e as any)} title="Copy path">
+                      {(activeStep as any).evidenceFile}{(activeStep as any).evidenceLine ? `:${(activeStep as any).evidenceLine}` : ""}
+                    </code>
+                    {(activeStep as any).handlerName && (
+                      <span className="fv-ctx-deriv-handler">{(activeStep as any).handlerName}()</span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="fv-ctx-derivation fv-ctx-derivation-inferred">
+                  <span className="fv-ctx-deriv-icon">◌</span>
+                  <div className="fv-ctx-deriv-body">
+                    <span className="fv-ctx-deriv-label">Inferred from structure</span>
+                    {(activeFlow as any).structuralReason && (
+                      <span className="fv-ctx-deriv-reason">{(activeFlow as any).structuralReason}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {activeImpact.semantic && (
                 <span className="fv-ctx-semantic">{activeImpact.semantic}</span>
               )}
 
-              {(activeStep.whyItMatters || activeImpact.summary) && (
-                <p className="fv-ctx-importance">{shortenImportance(activeStep.whyItMatters || activeImpact.summary)}</p>
+              {(activeImpact.summary) && (
+                <p className="fv-ctx-importance">{shortenImportance(activeImpact.summary)}</p>
               )}
 
               {activeImpact.level !== "unknown" && (activeImpact.systemCount > 0 || activeImpact.zoneCount > 0) && (

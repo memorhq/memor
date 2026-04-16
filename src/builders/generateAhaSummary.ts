@@ -71,6 +71,21 @@ function buildHeadline(
   story: RepoStory,
   analysis: RepoAnalysis
 ): string {
+  // Purpose detection overrides all generic narratives when confidence is medium or high.
+  // This is not a style preference — it is the primary identity of the repo.
+  const purpose = analysis.inferredRepoPurpose;
+  if (purpose && (purpose.confidence === "high" || purpose.confidence === "medium")) {
+    // Construct a fact-grounded headline from the top signal.
+    // Lower-case only the first letter so proper nouns (Storybook, Cypress, etc.) are preserved.
+    const topSignal = purpose.signals[0];
+    const evidenceNote = topSignal
+      ? ` — ${topSignal.label}`
+      : "";
+    const purposePhrase = purpose.label.charAt(0).toLowerCase() + purpose.label.slice(1);
+    const article = /^[aeiou]/i.test(purposePhrase) ? "an" : "a";
+    return `${repoName} is ${article} ${purposePhrase}${evidenceNote}.`;
+  }
+
   const zoneNames = story.zones.slice(0, 3).map((z) => z.name.toLowerCase());
   const zoneList = zoneNames.join(", ");
 

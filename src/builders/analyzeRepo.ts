@@ -38,6 +38,7 @@ import { readTextSafe } from "../utils/file";
 import { detectAppInternalUnits } from "../detectors/detectAppInternalUnits";
 import { detectRoutes } from "../scanner/detectRoutes";
 import { detectDBOperations } from "../scanner/detectDBOps";
+import { detectRepoPurpose } from "../scanner/detectRepoPurpose";
 
 // ── Per-system tech detection ─────────────────────────────────────────
 
@@ -442,6 +443,14 @@ export async function analyzeRepo(repoPath: string): Promise<AnalyzeResult> {
     repoMode
   );
 
+  // Phase 8: deterministic repo purpose detection
+  // Runs at repo root — uses file density, config files, package.json signals only.
+  let inferredRepoPurpose: import("../scanner/detectRepoPurpose").InferredRepoPurpose | undefined;
+  try {
+    const purpose = await detectRepoPurpose(rootPath);
+    if (purpose.kind !== "unknown") inferredRepoPurpose = purpose;
+  } catch { /* best-effort */ }
+
   const analysis: RepoAnalysis = {
     repoName,
     rootPath,
@@ -451,6 +460,7 @@ export async function analyzeRepo(repoPath: string): Promise<AnalyzeResult> {
     systems: finalSystems,
     ignoredPaths: scan.ignoredPaths,
     summary,
+    inferredRepoPurpose,
   };
 
   return {
